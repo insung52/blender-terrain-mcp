@@ -22,7 +22,22 @@ model Job {
   result      Json?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  terrain     Terrain?
 
   @@index([userId])
   @@index([status])
+}
+
+model Terrain {
+  id            String   @id @default(uuid())
+  jobId         String   @unique
+  job           Job      @relation(fields: [jobId], references: [id])
+  userId        String
+  description   String?  @db.Text
+  blendFilePath String
+  topViewPath   String
+  metadata      Json?
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
 }

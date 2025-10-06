@@ -154,6 +154,46 @@ app.get('/api/job/:jobId', async (req, res) => {
   }
 });
 
+// Terrain 생성 API
+app.post('/api/terrain', async (req, res) => {
+  try {
+    const { description, scale, roughness, size } = req.body;
+
+    // DB: Job 생성
+    const dbJob = await prisma.job.create({
+      data: {
+        userId: 'test-user',
+        type: 'terrain',
+        status: 'queued',
+        inputParams: { description, scale, roughness, size }
+      }
+    });
+
+    console.log(`[API] Created terrain job: ${dbJob.id}`);
+
+    // Queue: Job 추가
+    await blenderQueue.add({
+      dbJobId: dbJob.id,
+      type: 'terrain',
+      params: {
+        description,
+        scale: scale || 15,
+        roughness: roughness || 0.7,
+        size: size || 100
+      }
+    });
+
+    res.json({
+      success: true,
+      jobId: dbJob.id,
+      status: 'queued',
+      message: 'Terrain generation started'
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`✅ Server running on http://localhost:${PORT}`);

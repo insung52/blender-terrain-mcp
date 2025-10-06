@@ -23,24 +23,82 @@ blenderQueue.process(2, async (job) => {
       data: { status: 'processing' }
     });
 
-    // 2. Blender 실행
-    const scriptPath = path.join(process.cwd(), 'src', 'blender-scripts', 'test.py');
-    const outputPath = path.join(process.cwd(), 'output', `${dbJobId}.blend`);
+    // 2. Job 타입별 처리
+    if (type === 'terrain') {
+      // Terrain 생성
+      const scriptPath = path.join(process.cwd(), 'src', 'blender-scripts', 'terrain_generator.py');
+      const outputPath = path.join(process.cwd(), 'output', `${dbJobId}.blend`);
+      const previewPath = path.join(process.cwd(), 'output', `${dbJobId}_preview.png`);
 
-    console.log(`[Worker] Executing Blender script...`);
-    await executeBlenderScript(scriptPath, outputPath);
+      // Blender 스크립트에 파라미터 전달 (임시 파일 사용)
+      const fs = require('fs');
+      const paramsFilePath = path.join(process.cwd(), 'output', `${dbJobId}_params.json`);
+      fs.writeFileSync(paramsFilePath, JSON.stringify(params));
 
-    // 3. DB 상태 업데이트: completed
-    await prisma.job.update({
-      where: { id: dbJobId },
-      data: {
-        status: 'completed',
-        result: { blendFile: outputPath }
+      console.log(`[Worker] Creating terrain with params: ${JSON.stringify(params)}`);
+
+      // Blender 실행 (파라미터 포함)
+      const { exec } = require('child_process');
+      const { promisify } = require('util');
+      const execAsync = promisify(exec);
+
+      const { config } = require('../config');
+      const command = `"${config.blenderPath}" --background --python "${scriptPath}" -- "${paramsFilePath}" "${outputPath}" "${previewPath}"`;
+
+      console.log(`[Worker] Executing Blender...`);
+      const result = await execAsync(command, { maxBuffer: 10 * 1024 * 1024 }); // 10MB buffer
+
+      // 임시 파일 삭제
+      try { fs.unlinkSync(paramsFilePath); } catch (e) {}
+
+      console.log(`[Worker] Blender execution completed`);
+      if (result.stderr && result.stderr.includes('Error')) {
+        console.error(`[Worker] Blender stderr:`, result.stderr);
       }
-    });
 
-    console.log(`[Worker] Job ${job.id} completed successfully`);
-    return { success: true, outputPath };
+      // Terrain DB 레코드 생성
+      await prisma.terrain.create({
+        data: {
+          jobId: dbJobId,
+          userId: 'test-user',
+          description: params.description || null,
+          blendFilePath: outputPath,
+          topViewPath: previewPath,
+          metadata: params
+        }
+      });
+
+      // Job 완료
+      await prisma.job.update({
+        where: { id: dbJobId },
+        data: {
+          status: 'completed',
+          result: { blendFile: outputPath, preview: previewPath }
+        }
+      });
+
+      console.log(`[Worker] Terrain created: ${outputPath}`);
+      return { success: true, outputPath, previewPath };
+
+    } else {
+      // 기본 테스트 (기존 코드)
+      const scriptPath = path.join(process.cwd(), 'src', 'blender-scripts', 'test.py');
+      const outputPath = path.join(process.cwd(), 'output', `${dbJobId}.blend`);
+
+      console.log(`[Worker] Executing Blender script...`);
+      await executeBlenderScript(scriptPath, outputPath);
+
+      await prisma.job.update({
+        where: { id: dbJobId },
+        data: {
+          status: 'completed',
+          result: { blendFile: outputPath }
+        }
+      });
+
+      console.log(`[Worker] Job ${job.id} completed successfully`);
+      return { success: true, outputPath };
+    }
 
   } catch (error: any) {
     console.error(`[Worker] Job ${job.id} failed:`, error.message);
