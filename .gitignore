@@ -3,3 +3,4 @@ node_modules
 nul
 /src/generated/prisma
 output
+.env

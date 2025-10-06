@@ -2,6 +2,7 @@ import express from 'express';
 import { executeBlenderScript } from './services/blenderService';
 import { prisma } from './db/client';
 import { blenderQueue } from './queue/blenderQueue';
+import { analyzeTerrainDescription } from './services/claudeService';
 import path from 'path';
 
 const app = express();
@@ -158,7 +159,28 @@ app.get('/api/job/:jobId', async (req, res) => {
 // Terrain 생성 API
 app.post('/api/terrain', async (req, res) => {
   try {
-    const { description, scale, roughness, size } = req.body;
+    const { description, scale, roughness, size, useAI } = req.body;
+
+    let finalParams = {
+      scale: scale || 15,
+      roughness: roughness || 0.7,
+      size: size || 100,
+      description: description || ''
+    };
+
+    // Claude AI 분석 사용 (useAI가 true이고 description이 있을 때)
+    if (useAI && description && process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== 'your-api-key-here') {
+      console.log(`[API] Analyzing terrain with Claude: "${description}"`);
+      try {
+        const aiParams = await analyzeTerrainDescription(description);
+        finalParams.scale = aiParams.scale;
+        finalParams.roughness = aiParams.roughness;
+        finalParams.description = aiParams.description;
+        console.log(`[API] Claude analysis result:`, aiParams);
+      } catch (error: any) {
+        console.error(`[API] Claude analysis failed, using defaults:`, error.message);
+      }
+    }
 
     // DB: Job 생성
     const dbJob = await prisma.job.create({
@@ -166,7 +188,7 @@ app.post('/api/terrain', async (req, res) => {
         userId: 'test-user',
         type: 'terrain',
         status: 'queued',
-        inputParams: { description, scale, roughness, size }
+        inputParams: { ...finalParams, useAI }
       }
     });
 
@@ -176,12 +198,7 @@ app.post('/api/terrain', async (req, res) => {
     await blenderQueue.add({
       dbJobId: dbJob.id,
       type: 'terrain',
-      params: {
-        description,
-        scale: scale || 15,
-        roughness: roughness || 0.7,
-        size: size || 100
-      }
+      params: finalParams
     });
 
     res.json({
