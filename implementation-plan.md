@@ -98,15 +98,15 @@ blender output/test.blend  # 큐브가 있는지 확인
 
 ---
 
-## Stage 2: PostgreSQL + Prisma 셋업 (15분)
+## Stage 2: MySQL + Prisma 셋업 (15분)
 ### 목표
 데이터베이스 연결 및 기본 모델 생성
 
 ### 작업
-1. PostgreSQL 설치 및 DB 생성
+1. MySQL DB 생성
    ```bash
-   # PostgreSQL 설치 (이미 설치되어 있다면 스킵)
-   createdb blender_terrain
+   # MySQL 명령어로 DB 생성
+   mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS blender_terrain;"
    ```
 
 2. Prisma 설치 및 초기화
@@ -118,7 +118,7 @@ blender output/test.blend  # 큐브가 있는지 확인
 3. `prisma/schema.prisma` 작성 (일단 Jobs만)
    ```prisma
    datasource db {
-     provider = "postgresql"
+     provider = "mysql"
      url      = env("DATABASE_URL")
    }
 
@@ -135,10 +135,18 @@ blender output/test.blend  # 큐브가 있는지 확인
      result      Json?
      createdAt   DateTime @default(now())
      updatedAt   DateTime @updatedAt
+
+     @@index([userId])
+     @@index([status])
    }
    ```
 
-4. 마이그레이션 실행
+4. `.env` 파일 설정
+   ```
+   DATABASE_URL="mysql://root:PASSWORD@localhost:3306/blender_terrain"
+   ```
+
+5. 마이그레이션 실행
    ```bash
    npx prisma migrate dev --name init
    ```
@@ -174,7 +182,7 @@ npx prisma studio
 ```
 
 ### 성공 조건
-- ✅ PostgreSQL 연결 성공
+- ✅ MySQL 연결 성공
 - ✅ Prisma 마이그레이션 성공
 - ✅ Job 생성/조회 가능
 
@@ -711,9 +719,9 @@ curl -X POST http://localhost:3000/api/terrain \
 
 ## 요약: 단계별 체크리스트
 
-- [ ] **Stage 0**: 환경 셋업 (5분)
-- [ ] **Stage 1**: Blender 제어 테스트 (10분)
-- [ ] **Stage 2**: PostgreSQL + Prisma (15분)
+- [x] **Stage 0**: 환경 셋업 (5분) ✅
+- [x] **Stage 1**: Blender 제어 테스트 (10분) ✅
+- [x] **Stage 2**: MySQL + Prisma (15분) ✅
 - [ ] **Stage 3**: Bull Queue (15분)
 - [ ] **Stage 4**: Blender + Queue + DB 통합 (20분)
 - [ ] **Stage 5**: Procedural Terrain 생성 (30분)

@@ -472,8 +472,8 @@ blender-terrain-mcp/
 ### Backend
 - **Runtime**: Node.js + TypeScript
 - **Server**: Express.js
-- **Database**: PostgreSQL
-- **ORM**: Prisma 또는 TypeORM
+- **Database**: MySQL
+- **ORM**: Prisma
 - **Queue**: Bull (Redis 기반)
 - **AI**: Anthropic Claude API
 - **3D**: Blender (headless mode)
@@ -490,8 +490,8 @@ blender-terrain-mcp/
 
 ### Phase 1: 기본 기능 (MVP)
 1. ✅ Node.js + Express + TypeScript 서버 셋업
-2. ✅ PostgreSQL + Prisma 셋업
-3. ✅ Bull Queue + Redis 구성
+2. ✅ MySQL + Prisma 셋업
+3. ⏳ Bull Queue + Redis 구성
 4. ✅ Blender headless 실행 테스트
 5. ✅ Procedural terrain 생성 (Claude 없이)
 6. ✅ 기본 road 생성
