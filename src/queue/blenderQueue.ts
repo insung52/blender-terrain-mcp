@@ -80,6 +80,65 @@ blenderQueue.process(2, async (job) => {
       console.log(`[Worker] Terrain created: ${outputPath}`);
       return { success: true, outputPath, previewPath };
 
+    } else if (type === 'road') {
+      // Road 생성
+      const scriptPath = path.join(process.cwd(), 'src', 'blender-scripts', 'road_generator.py');
+      const terrainBlendPath = params.terrainBlendPath;
+      const outputPath = path.join(process.cwd(), 'output', `${dbJobId}.blend`);
+      const previewPath = path.join(process.cwd(), 'output', `${dbJobId}_preview.png`);
+
+      // 파라미터 파일 생성
+      const fs = require('fs');
+      const paramsFilePath = path.join(process.cwd(), 'output', `${dbJobId}_params.json`);
+      fs.writeFileSync(paramsFilePath, JSON.stringify(params));
+
+      console.log(`[Worker] Creating road with ${params.controlPoints.length} points`);
+
+      // Blender 실행
+      const { exec } = require('child_process');
+      const { promisify } = require('util');
+      const execAsync = promisify(exec);
+      const { config } = require('../config');
+
+      const command = `"${config.blenderPath}" --background --python "${scriptPath}" -- "${paramsFilePath}" "${terrainBlendPath}" "${outputPath}" "${previewPath}"`;
+
+      console.log(`[Worker] Executing Blender for road...`);
+      const result = await execAsync(command, { maxBuffer: 10 * 1024 * 1024 });
+
+      // 임시 파일 삭제
+      try { fs.unlinkSync(paramsFilePath); } catch (e) {}
+
+      console.log(`[Worker] Road execution completed`);
+      if (result.stderr && result.stderr.includes('Error')) {
+        console.error(`[Worker] Blender stderr:`, result.stderr);
+      }
+
+      // Road DB 레코드 생성
+      await prisma.road.create({
+        data: {
+          jobId: dbJobId,
+          terrainId: params.terrainId,
+          userId: 'test-user',
+          controlPoints: params.controlPoints,
+          blendFilePath: outputPath,
+          previewPath: previewPath,
+          widthMeters: params.width,
+          metadata: params
+        }
+      });
+
+      // Job 완료
+      await prisma.job.update({
+        where: { id: dbJobId },
+        data: {
+          status: 'completed',
+          result: { blendFile: outputPath, preview: previewPath }
+        }
+      });
+
+      console.log(`[Worker] Road created: ${outputPath}`);
+      return { success: true, outputPath, previewPath };
+
     } else {
       // 기본 테스트 (기존 코드)
       const scriptPath = path.join(process.cwd(), 'src', 'blender-scripts', 'test.py');

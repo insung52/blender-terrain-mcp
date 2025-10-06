@@ -141,7 +141,8 @@ app.post('/api/test-full', async (req, res) => {
 app.get('/api/job/:jobId', async (req, res) => {
   try {
     const job = await prisma.job.findUnique({
-      where: { id: req.params.jobId }
+      where: { id: req.params.jobId },
+      include: { terrain: true, road: true }
     });
 
     if (!job) {
@@ -188,6 +189,55 @@ app.post('/api/terrain', async (req, res) => {
       jobId: dbJob.id,
       status: 'queued',
       message: 'Terrain generation started'
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Road 생성 API
+app.post('/api/road', async (req, res) => {
+  try {
+    const { terrainId, controlPoints, width } = req.body;
+
+    // Terrain 조회
+    const terrain = await prisma.terrain.findUnique({
+      where: { id: terrainId }
+    });
+
+    if (!terrain) {
+      return res.status(404).json({ success: false, error: 'Terrain not found' });
+    }
+
+    // DB: Job 생성
+    const dbJob = await prisma.job.create({
+      data: {
+        userId: 'test-user',
+        type: 'road',
+        status: 'queued',
+        inputParams: { terrainId, controlPoints, width }
+      }
+    });
+
+    console.log(`[API] Created road job: ${dbJob.id}`);
+
+    // Queue: Job 추가
+    await blenderQueue.add({
+      dbJobId: dbJob.id,
+      type: 'road',
+      params: {
+        terrainId,
+        terrainBlendPath: terrain.blendFilePath,
+        controlPoints,
+        width: width || 1.6
+      }
+    });
+
+    res.json({
+      success: true,
+      jobId: dbJob.id,
+      status: 'queued',
+      message: 'Road generation started'
     });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
