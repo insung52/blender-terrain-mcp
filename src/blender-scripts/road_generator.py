@@ -54,13 +54,14 @@ spline.bezier_points.add(len(control_points) - 1)  # 첫 포인트는 이미 있
 for i, point in enumerate(control_points):
     bp = spline.bezier_points[i]
     # 좌표 변환: 웹 좌표 -> Blender 좌표 (중앙 기준)
+    # Terrain 크기: 1000m (1km) → 좌표 범위: 0-100 → -500~500
     # point가 dict인 경우 {"x": 10, "y": 20}, list인 경우 [10, 20]
     if isinstance(point, dict):
-        x = point['x'] - 50  # 0-100 -> -50~50
-        y = point['y'] - 50
+        x = (point['x'] - 50) * 10  # 0-100 -> -500~500 (10배 스케일)
+        y = (point['y'] - 50) * 10
     else:  # list 또는 tuple
-        x = point[0] - 50
-        y = point[1] - 50
+        x = (point[0] - 50) * 10  # 0-100 -> -500~500 (10배 스케일)
+        y = (point[1] - 50) * 10
     bp.co = (x, y, 0)
     bp.handle_left_type = 'AUTO'
     bp.handle_right_type = 'AUTO'
@@ -104,12 +105,17 @@ bpy.context.scene.render.resolution_x = 1024
 bpy.context.scene.render.resolution_y = 1024
 bpy.context.scene.render.filepath = preview_path
 
-# 카메라가 이미 있는지 확인
-if not bpy.context.scene.camera:
-    bpy.ops.object.camera_add(location=(0, 0, 100))
+# 카메라가 이미 있는지 확인 (terrain 파일에서 로드된 경우 이미 존재)
+camera = bpy.context.scene.camera
+if not camera:
+    # Terrain 크기: 1000m → 카메라 높이: 1800m
+    bpy.ops.object.camera_add(location=(0, 0, 1800))
     camera = bpy.context.active_object
     camera.rotation_euler = (0, 0, 0)
     bpy.context.scene.camera = camera
+
+# Far clip plane 설정 (기존 카메라든 새 카메라든 모두 적용)
+camera.data.clip_end = 5000  # 충분히 멀리
 
 bpy.ops.render.render(write_still=True)
 

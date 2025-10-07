@@ -162,12 +162,12 @@ app.get('/api/job/:jobId', async (req, res) => {
 // Terrain 생성 API
 app.post('/api/terrain', async (req, res) => {
   try {
-    const { description, scale, roughness, size, useAI } = req.body;
+    const { description, scale, roughness, size, terrain_scale, useAI } = req.body;
 
     let finalParams = {
       scale: scale || 15,
       roughness: roughness || 0.7,
-      size: size || 100,
+      terrain_scale: terrain_scale || 10,  // 지형 스케일 배율 (기본 10배)
       description: description || ''
     };
 

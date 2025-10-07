@@ -28,7 +28,7 @@ function App() {
   const [useAI, setUseAI] = useState(true);
 
   const [roadTerrainId, setRoadTerrainId] = useState('');
-  const [roadPoints, setRoadPoints] = useState('[[10,10],[50,30],[90,80]]');
+  const [roadPoints, setRoadPoints] = useState('[[10,10],[80,50],[50,30],[90,80],[70,50]]');
 
   const [jobId, setJobId] = useState('');
   const [job, setJob] = useState<Job | null>(null);

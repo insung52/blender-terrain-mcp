@@ -52,14 +52,16 @@ grass_color = params.get('grass_color', [0.2, 0.4, 0.1])
 climate = params.get('climate', 'temperate')
 wetness = params.get('wetness', 0.3)
 
-size = params.get('size', 100)
+base_size = 100  # 기본 100m로 생성
+terrain_scale = params.get('terrain_scale', 10)  # 최종 스케일 배율 (기본 10배 = 1km)
+size = base_size * terrain_scale  # 최종 크기 (표시용)
 
-print(f"[Terrain v2] Creating terrain: {size}m, height={height_multiplier}m, type={noise_type}")
+print(f"[Terrain v2] Creating terrain: base={base_size}m, scale={terrain_scale}x, final={size}m, height={height_multiplier}m")
 
-# ===== 1. 고해상도 Plane 생성 =====
+# ===== 1. 고해상도 Plane 생성 (항상 100m로 생성) =====
 print(f"[Terrain v2] Creating high-res plane...")
 bpy.ops.mesh.primitive_grid_add(
-    size=size,
+    size=base_size,  # 항상 100m로 생성
     x_subdivisions=200,  # 높은 해상도
     y_subdivisions=200,
     location=(0, 0, 0)
@@ -200,8 +202,8 @@ terrain.modifiers.remove(geo_nodes)
 
 # Subdivision Surface
 subsurf = terrain.modifiers.new(name="Subdivision", type='SUBSURF')
-subsurf.levels = 5
-subsurf.render_levels = 5
+subsurf.levels = 3  # 5 → 3 (파일 크기 최적화: 4GB → ~150MB)
+subsurf.render_levels = 3
 
 # 실제 노이즈 텍스처 생성 (수동)
 noise_tex = bpy.data.textures.new("ComplexNoise", type='CLOUDS')
@@ -212,6 +214,12 @@ displace_mod.texture = noise_tex
 # 모디파이어 적용
 bpy.ops.object.modifier_apply(modifier="Subdivision")
 bpy.ops.object.modifier_apply(modifier="Displacement")
+
+# ===== 9.5. Terrain 스케일 적용 =====
+z_scale = 3  # Z축 스케일 (높이 3배)
+print(f"[Terrain v2] Applying terrain scale: XY={terrain_scale}x, Z={z_scale}x")
+terrain.scale = (terrain_scale, terrain_scale, z_scale)  # XY 10배, Z 3배
+bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
 
 # ===== 10. Material 생성 (높이 기반) =====
 print(f"[Terrain v2] Creating height-based material...")
@@ -283,6 +291,7 @@ print(f"[Terrain v2] Setting up camera...")
 bpy.ops.object.camera_add(location=(0, 0, size * 1.8))
 camera = bpy.context.active_object
 camera.rotation_euler = (0, 0, 0)
+camera.data.clip_end = size * 5  # Far clip plane 설정 (충분히 멀리)
 bpy.context.scene.camera = camera
 
 # ===== 12. 조명 =====
