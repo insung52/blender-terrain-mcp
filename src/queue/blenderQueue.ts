@@ -25,8 +25,8 @@ blenderQueue.process(2, async (job) => {
 
     // 2. Job 타입별 처리
     if (type === 'terrain') {
-      // Terrain 생성
-      const scriptPath = path.join(process.cwd(), 'src', 'blender-scripts', 'terrain_generator.py');
+      // Terrain 생성 (v2 스크립트 사용)
+      const scriptPath = path.join(process.cwd(), 'src', 'blender-scripts', 'terrain_generator_v2.py');
       const outputPath = path.join(process.cwd(), 'output', `${dbJobId}.blend`);
       const previewPath = path.join(process.cwd(), 'output', `${dbJobId}_preview.png`);
 

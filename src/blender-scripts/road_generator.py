@@ -2,14 +2,15 @@ import bpy
 import sys
 import json
 import math
+import os
 
 # 커맨드 라인 인자 파싱
 # blender --background --python road_generator.py -- params.json terrain.blend output.blend preview.png
 args = sys.argv[sys.argv.index("--") + 1:]
-params_file = args[0]
-terrain_blend_path = args[1]
-output_path = args[2]
-preview_path = args[3]
+params_file = os.path.abspath(args[0])
+terrain_blend_path = os.path.abspath(args[1])
+output_path = os.path.abspath(args[2])
+preview_path = os.path.abspath(args[3])
 
 # 파라미터 파일 읽기
 with open(params_file, 'r') as f:
@@ -53,8 +54,13 @@ spline.bezier_points.add(len(control_points) - 1)  # 첫 포인트는 이미 있
 for i, point in enumerate(control_points):
     bp = spline.bezier_points[i]
     # 좌표 변환: 웹 좌표 -> Blender 좌표 (중앙 기준)
-    x = point['x'] - 50  # 0-100 -> -50~50
-    y = point['y'] - 50
+    # point가 dict인 경우 {"x": 10, "y": 20}, list인 경우 [10, 20]
+    if isinstance(point, dict):
+        x = point['x'] - 50  # 0-100 -> -50~50
+        y = point['y'] - 50
+    else:  # list 또는 tuple
+        x = point[0] - 50
+        y = point[1] - 50
     bp.co = (x, y, 0)
     bp.handle_left_type = 'AUTO'
     bp.handle_right_type = 'AUTO'

@@ -54,35 +54,42 @@ displace.texture = texture
 displace.strength = roughness * 10  # 높이 조절
 displace.mid_level = 0.5
 
-# 4. Smooth Shading
+# 4. 모디파이어 적용 (Apply modifiers to mesh)
+print(f"[Terrain] Applying modifiers to mesh...")
+# Subdivision 먼저 적용
+bpy.ops.object.modifier_apply(modifier="Subdivision")
+# Displacement 적용
+bpy.ops.object.modifier_apply(modifier="Displace")
+
+# 5. Smooth Shading
 print(f"[Terrain] Applying smooth shading...")
 bpy.ops.object.shade_smooth()
 
-# 5. 카메라 설정 (Top View)
+# 6. 카메라 설정 (Top View)
 print(f"[Terrain] Setting up camera...")
 bpy.ops.object.camera_add(location=(0, 0, size * 1.5))
 camera = bpy.context.active_object
 camera.rotation_euler = (0, 0, 0)
 bpy.context.scene.camera = camera
 
-# 6. 조명 추가
+# 7. 조명 추가
 print(f"[Terrain] Adding light...")
 bpy.ops.object.light_add(type='SUN', location=(size/2, size/2, size))
 light = bpy.context.active_object
 light.data.energy = 2.0
 
-# 7. 렌더 설정
+# 8. 렌더 설정
 print(f"[Terrain] Configuring render settings...")
 bpy.context.scene.render.engine = 'BLENDER_EEVEE_NEXT'
 bpy.context.scene.render.resolution_x = 1024
 bpy.context.scene.render.resolution_y = 1024
 bpy.context.scene.render.filepath = preview_path
 
-# 8. Top View 렌더링
+# 9. Top View 렌더링
 print(f"[Terrain] Rendering top view...")
 bpy.ops.render.render(write_still=True)
 
-# 9. .blend 파일 저장
+# 10. .blend 파일 저장
 print(f"[Terrain] Saving blend file...")
 bpy.ops.wm.save_as_mainfile(filepath=output_path)
 

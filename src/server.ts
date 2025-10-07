@@ -1,4 +1,5 @@
 import express from 'express';
+import cors from 'cors';
 import { executeBlenderScript } from './services/blenderService';
 import { prisma } from './db/client';
 import { blenderQueue } from './queue/blenderQueue';
@@ -9,7 +10,9 @@ const app = express();
 const PORT = 3000;
 
 // Middleware
+app.use(cors());
 app.use(express.json());
+app.use('/output', express.static(path.join(__dirname, '../output')));
 
 // Health check
 app.get('/', (req, res) => {
@@ -173,9 +176,11 @@ app.post('/api/terrain', async (req, res) => {
       console.log(`[API] Analyzing terrain with Claude: "${description}"`);
       try {
         const aiParams = await analyzeTerrainDescription(description);
-        finalParams.scale = aiParams.scale;
-        finalParams.roughness = aiParams.roughness;
-        finalParams.description = aiParams.description;
+        // v2.0: Claude의 모든 파라미터를 finalParams에 병합
+        finalParams = {
+          ...finalParams,
+          ...aiParams  // 모든 v2 파라미터 포함
+        };
         console.log(`[API] Claude analysis result:`, aiParams);
       } catch (error: any) {
         console.error(`[API] Claude analysis failed, using defaults:`, error.message);
