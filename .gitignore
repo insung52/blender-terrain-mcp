@@ -4,3 +4,4 @@ nul
 /src/generated/prisma
 output
 .env
+log

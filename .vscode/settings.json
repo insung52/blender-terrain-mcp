@@ -1,0 +1,8 @@
+{
+  "python.analysis.exclude": [
+    "**/src/blender-scripts/**"
+  ],
+  "python.linting.pylintArgs": [
+    "--ignore=src/blender-scripts"
+  ]
+}
