@@ -6,18 +6,18 @@ import os
 
 # 커맨드 라인 인자 파싱
 # blender --background --python road_generator.py -- params.json terrain.blend output.blend preview.png
-args = sys.argv[sys.argv.index("--") + 1:]
+args = sys.argv[sys.argv.index("--") + 1 :]
 params_file = os.path.abspath(args[0])
 terrain_blend_path = os.path.abspath(args[1])
 output_path = os.path.abspath(args[2])
 preview_path = os.path.abspath(args[3])
 
 # 파라미터 파일 읽기
-with open(params_file, 'r') as f:
+with open(params_file, "r") as f:
     params = json.load(f)
 
-control_points = params.get('controlPoints', [])
-road_width = params.get('width', 1.6)  # 기본 1.6m (1차선)
+control_points = params.get("controlPoints", [])
+road_width = params.get("width", 1.6)  # 기본 1.6m (1차선)
 
 print(f"[Road] Parameters: {params}")
 print(f"[Road] Control points: {len(control_points)}")
@@ -31,7 +31,7 @@ bpy.ops.wm.open_mainfile(filepath=terrain_blend_path)
 # Terrain 오브젝트 찾기
 terrain_obj = None
 for obj in bpy.data.objects:
-    if obj.type == 'MESH' and 'Terrain' in obj.name:
+    if obj.type == "MESH" and "Terrain" in obj.name:
         terrain_obj = obj
         break
 
@@ -43,11 +43,11 @@ print(f"[Road] Found terrain: {terrain_obj.name}")
 
 # 2. Bezier Curve 생성
 print(f"[Road] Creating road curve...")
-curve_data = bpy.data.curves.new('RoadCurve', type='CURVE')
-curve_data.dimensions = '3D'
+curve_data = bpy.data.curves.new("RoadCurve", type="CURVE")
+curve_data.dimensions = "3D"
 
 # Spline 생성
-spline = curve_data.splines.new('BEZIER')
+spline = curve_data.splines.new("BEZIER")
 spline.bezier_points.add(len(control_points) - 1)  # 첫 포인트는 이미 있음
 
 # Control points 설정 및 도로 길이 계산
@@ -58,8 +58,8 @@ for i, point in enumerate(control_points):
     # 좌표 변환: 웹 좌표 -> Blender 좌표 (중앙 기준)
     # Terrain 크기: 1000m (1km) → 좌표 범위: 0-100 → -500~500
     if isinstance(point, dict):
-        x = (point['x'] - 50) * 10  # 0-100 -> -500~500 (10배 스케일)
-        y = (point['y'] - 50) * 10
+        x = (point["x"] - 50) * 10  # 0-100 -> -500~500 (10배 스케일)
+        y = (point["y"] - 50) * 10
     else:  # list 또는 tuple
         x = (point[0] - 50) * 10
         y = (point[1] - 50) * 10
@@ -68,8 +68,8 @@ for i, point in enumerate(control_points):
 
     # 이전 포인트와의 거리 계산
     if i > 0:
-        prev_x, prev_y = converted_points[i-1]
-        segment_length = math.sqrt((x - prev_x)**2 + (y - prev_y)**2)
+        prev_x, prev_y = converted_points[i - 1]
+        segment_length = math.sqrt((x - prev_x) ** 2 + (y - prev_y) ** 2)
         total_length += segment_length
 
 print(f"[Road] Total road length: {total_length:.1f}m")
@@ -80,11 +80,11 @@ start_z = 10000  # 10km 높이에서 시작 (어떤 지형보다 높음)
 for i, (x, y) in enumerate(converted_points):
     bp = spline.bezier_points[i]
     bp.co = (x, y, start_z)  # 높은 곳에서 시작
-    bp.handle_left_type = 'AUTO'
-    bp.handle_right_type = 'AUTO'
+    bp.handle_left_type = "AUTO"
+    bp.handle_right_type = "AUTO"
 
 # Curve Object 생성
-curve_obj = bpy.data.objects.new('Road', curve_data)
+curve_obj = bpy.data.objects.new("Road", curve_data)
 bpy.context.collection.objects.link(curve_obj)
 
 # 3. 동적 Curve 해상도 계산 (도로 길이 기반)
@@ -103,9 +103,9 @@ curve_data.bevel_depth = road_width / 2  # 반지름
 
 # 5. Shrinkwrap Modifier (하늘에서 지형으로 투영)
 print(f"[Road] Adding shrinkwrap modifier...")
-modifier = curve_obj.modifiers.new('Shrinkwrap', 'SHRINKWRAP')
+modifier = curve_obj.modifiers.new("Shrinkwrap", "SHRINKWRAP")
 modifier.target = terrain_obj
-modifier.wrap_method = 'PROJECT'  # PROJECT 방식
+modifier.wrap_method = "PROJECT"  # PROJECT 방식
 modifier.use_project_z = True
 modifier.use_negative_direction = True  # 아래로만 투영 (Z=10000 → 지형)
 modifier.use_positive_direction = False  # 위로는 투영 안함
@@ -122,101 +122,131 @@ links = mat.node_tree.links
 nodes.clear()
 
 # === Output 노드 ===
-mat_output = nodes.new('ShaderNodeOutputMaterial')
+mat_output = nodes.new("ShaderNodeOutputMaterial")
 mat_output.location = (1200, 0)
 
 # === Principled BSDF ===
-bsdf = nodes.new('ShaderNodeBsdfPrincipled')
+bsdf = nodes.new("ShaderNodeBsdfPrincipled")
 bsdf.location = (1000, 0)
-links.new(bsdf.outputs['BSDF'], mat_output.inputs['Surface'])
+links.new(bsdf.outputs["BSDF"], mat_output.inputs["Surface"])
 
 # === Texture Coordinate (도로 방향 따라 UV) ===
-tex_coord = nodes.new('ShaderNodeTexCoord')
+tex_coord = nodes.new("ShaderNodeTexCoord")
 tex_coord.location = (-800, 0)
 
 # === 1. 아스팔트 베이스 (Noise Texture) ===
-noise_asphalt = nodes.new('ShaderNodeTexNoise')
+noise_asphalt = nodes.new("ShaderNodeTexNoise")
 noise_asphalt.location = (-600, 300)
-noise_asphalt.inputs['Scale'].default_value = 50  # 미세한 질감
-noise_asphalt.inputs['Detail'].default_value = 10
-noise_asphalt.inputs['Roughness'].default_value = 0.7
-links.new(tex_coord.outputs['Generated'], noise_asphalt.inputs['Vector'])
+noise_asphalt.inputs["Scale"].default_value = 50  # 미세한 질감
+noise_asphalt.inputs["Detail"].default_value = 10
+noise_asphalt.inputs["Roughness"].default_value = 0.7
+links.new(tex_coord.outputs["Generated"], noise_asphalt.inputs["Vector"])
 
 # ColorRamp (어두운 회색 범위)
-ramp_asphalt = nodes.new('ShaderNodeValToRGB')
+ramp_asphalt = nodes.new("ShaderNodeValToRGB")
 ramp_asphalt.location = (-400, 300)
 ramp_asphalt.color_ramp.elements[0].position = 0.4
 ramp_asphalt.color_ramp.elements[0].color = (0.08, 0.08, 0.08, 1.0)  # 진한 회색
 ramp_asphalt.color_ramp.elements[1].position = 0.6
 ramp_asphalt.color_ramp.elements[1].color = (0.12, 0.12, 0.12, 1.0)  # 밝은 회색
-links.new(noise_asphalt.outputs['Fac'], ramp_asphalt.inputs['Fac'])
+links.new(noise_asphalt.outputs["Fac"], ramp_asphalt.inputs["Fac"])
 
-# === 2. 차선 (Generated Y축 기반) ===
-separate_xyz = nodes.new('ShaderNodeSeparateXYZ')
+# === 2. 차선 (Object 좌표계 - 도로를 따라감) ===
+separate_xyz = nodes.new("ShaderNodeSeparateXYZ")
 separate_xyz.location = (-600, 0)
-links.new(tex_coord.outputs['Generated'], separate_xyz.inputs['Vector'])
+links.new(
+    tex_coord.outputs["Object"], separate_xyz.inputs["Vector"]
+)  # Object 좌표 사용!
 
-# Y좌표를 이용한 반복 패턴 (차선)
-math_multiply = nodes.new('ShaderNodeMath')
-math_multiply.operation = 'MULTIPLY'
-math_multiply.location = (-400, 0)
-math_multiply.inputs[1].default_value = 40  # 차선 반복 빈도
-links.new(separate_xyz.outputs['Y'], math_multiply.inputs[0])
+# 차선 위치: X축 중앙만 (도로 가운데)
+math_abs_x = nodes.new("ShaderNodeMath")
+math_abs_x.operation = "ABSOLUTE"
+math_abs_x.location = (-400, 100)
+links.new(separate_xyz.outputs["X"], math_abs_x.inputs[0])
 
-# Modulo로 반복
-math_modulo = nodes.new('ShaderNodeMath')
-math_modulo.operation = 'MODULO'
-math_modulo.location = (-200, 0)
+ramp_center = nodes.new("ShaderNodeValToRGB")
+ramp_center.location = (-200, 100)
+ramp_center.color_ramp.elements[0].position = 0.0
+ramp_center.color_ramp.elements[0].color = (1, 1, 1, 1)
+ramp_center.color_ramp.elements[1].position = 0.3
+ramp_center.color_ramp.elements[1].color = (0, 0, 0, 1)
+links.new(math_abs_x.outputs["Value"], ramp_center.inputs["Fac"])
+
+# Y축 반복 (도로 진행 방향)
+math_multiply = nodes.new("ShaderNodeMath")
+math_multiply.operation = "MULTIPLY"
+math_multiply.location = (-400, -100)
+math_multiply.inputs[1].default_value = 0.1  # Y축 스케일 조정
+links.new(separate_xyz.outputs["Y"], math_multiply.inputs[0])
+
+math_modulo = nodes.new("ShaderNodeMath")
+math_modulo.operation = "MODULO"
+math_modulo.location = (-200, -100)
 math_modulo.inputs[1].default_value = 1.0
-links.new(math_multiply.outputs['Value'], math_modulo.inputs[0])
+links.new(math_multiply.outputs["Value"], math_modulo.inputs[0])
 
-# ColorRamp (차선 폭 조절)
-ramp_lane = nodes.new('ShaderNodeValToRGB')
-ramp_lane.location = (0, 0)
-ramp_lane.color_ramp.elements[0].position = 0.45
-ramp_lane.color_ramp.elements[0].color = (0, 0, 0, 1)  # 아스팔트
-ramp_lane.color_ramp.elements[1].position = 0.50
-ramp_lane.color_ramp.elements[1].color = (0.9, 0.9, 0.0, 1)  # 노란 차선
-links.new(math_modulo.outputs['Value'], ramp_lane.inputs['Fac'])
+# 점선 패턴
+ramp_dash = nodes.new("ShaderNodeValToRGB")
+ramp_dash.location = (0, -100)
+ramp_dash.color_ramp.elements[0].position = 0.4
+ramp_dash.color_ramp.elements[0].color = (0, 0, 0, 1)
+ramp_dash.color_ramp.elements[1].position = 0.6
+ramp_dash.color_ramp.elements[1].color = (1, 1, 1, 1)
+links.new(math_modulo.outputs["Value"], ramp_dash.inputs["Fac"])
+
+# 중앙 × 점선 = 중앙 점선
+math_mult_lane = nodes.new("ShaderNodeMath")
+math_mult_lane.operation = "MULTIPLY"
+math_mult_lane.location = (200, 0)
+links.new(ramp_center.outputs["Color"], math_mult_lane.inputs[0])
+links.new(ramp_dash.outputs["Color"], math_mult_lane.inputs[1])
+
+# 노란색 적용
+lane_color = nodes.new("ShaderNodeMix")
+lane_color.data_type = "RGBA"
+lane_color.location = (400, 0)
+lane_color.inputs["A"].default_value = (0, 0, 0, 1)
+lane_color.inputs["B"].default_value = (0.9, 0.9, 0.0, 1)
+links.new(math_mult_lane.outputs["Value"], lane_color.inputs["Factor"])
 
 # === 3. 균열 (Voronoi Crack) ===
-voronoi = nodes.new('ShaderNodeTexVoronoi')
+voronoi = nodes.new("ShaderNodeTexVoronoi")
 voronoi.location = (-600, -300)
-voronoi.voronoi_dimensions = '3D'
-voronoi.feature = 'DISTANCE_TO_EDGE'
-voronoi.inputs['Scale'].default_value = 5  # 균열 밀도
-links.new(tex_coord.outputs['Generated'], voronoi.inputs['Vector'])
+voronoi.voronoi_dimensions = "3D"
+voronoi.feature = "DISTANCE_TO_EDGE"
+voronoi.inputs["Scale"].default_value = 5  # 균열 밀도
+links.new(tex_coord.outputs["Generated"], voronoi.inputs["Vector"])
 
 # ColorRamp (균열을 검은 선으로)
-ramp_crack = nodes.new('ShaderNodeValToRGB')
+ramp_crack = nodes.new("ShaderNodeValToRGB")
 ramp_crack.location = (-400, -300)
 ramp_crack.color_ramp.elements[0].position = 0.05
 ramp_crack.color_ramp.elements[0].color = (0.05, 0.05, 0.05, 1.0)  # 검은 균열
 ramp_crack.color_ramp.elements[1].position = 0.1
 ramp_crack.color_ramp.elements[1].color = (1, 1, 1, 1)  # 투명
-links.new(voronoi.outputs['Distance'], ramp_crack.inputs['Fac'])
+links.new(voronoi.outputs["Distance"], ramp_crack.inputs["Fac"])
 
 # === 4. 모든 요소 Mix ===
 # Mix 1: 아스팔트 + 차선
-mix_lane = nodes.new('ShaderNodeMix')
-mix_lane.data_type = 'RGBA'
+mix_lane = nodes.new("ShaderNodeMix")
+mix_lane.data_type = "RGBA"
 mix_lane.location = (200, 150)
-links.new(ramp_asphalt.outputs['Color'], mix_lane.inputs['A'])
-links.new(ramp_lane.outputs['Color'], mix_lane.inputs['B'])
-links.new(ramp_lane.outputs['Alpha'], mix_lane.inputs['Factor'])
+links.new(ramp_asphalt.outputs["Color"], mix_lane.inputs["A"])
+links.new(lane_color.outputs["Result"], mix_lane.inputs["B"])
+links.new(math_mult_lane.outputs["Value"], mix_lane.inputs["Factor"])
 
 # Mix 2: (아스팔트+차선) + 균열
-mix_final = nodes.new('ShaderNodeMix')
-mix_final.data_type = 'RGBA'
+mix_final = nodes.new("ShaderNodeMix")
+mix_final.data_type = "RGBA"
 mix_final.location = (400, 150)
-mix_final.inputs['Factor'].default_value = 0.3  # 균열 강도
-links.new(mix_lane.outputs['Result'], mix_final.inputs['A'])
-links.new(ramp_crack.outputs['Color'], mix_final.inputs['B'])
+mix_final.inputs["Factor"].default_value = 0.3  # 균열 강도
+links.new(mix_lane.outputs["Result"], mix_final.inputs["A"])
+links.new(ramp_crack.outputs["Color"], mix_final.inputs["B"])
 
 # === 5. Principled BSDF 연결 ===
-links.new(mix_final.outputs['Result'], bsdf.inputs['Base Color'])
-bsdf.inputs['Roughness'].default_value = 0.85  # 거친 아스팔트
-bsdf.inputs['Specular IOR Level'].default_value = 0.3  # 약간의 반사
+links.new(mix_final.outputs["Result"], bsdf.inputs["Base Color"])
+bsdf.inputs["Roughness"].default_value = 0.85  # 거친 아스팔트
+bsdf.inputs["Specular IOR Level"].default_value = 0.3  # 약간의 반사
 
 print(f"[Road] Procedural material created: asphalt + lanes + cracks")
 
@@ -228,7 +258,7 @@ else:
 
 # 6. Top View 렌더링
 print(f"[Road] Rendering top view...")
-bpy.context.scene.render.engine = 'BLENDER_EEVEE_NEXT'
+bpy.context.scene.render.engine = "BLENDER_EEVEE_NEXT"
 bpy.context.scene.render.resolution_x = 1024
 bpy.context.scene.render.resolution_y = 1024
 bpy.context.scene.render.filepath = preview_path
