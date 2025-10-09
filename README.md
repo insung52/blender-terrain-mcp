@@ -15,6 +15,10 @@ AI 기반 자동 지형 생성 및 도로 배치 시스템
 
 ## ✨ 주요 기능
 
+웹 기반 서비스
+
+localhost:5173 접속 또는 실제 웹 서비스 배포 가능
+
 ### 1. 🤖 AI 기반 지형 생성
 Claude AI가 한글 설명을 분석하여 자동으로 지형 파라미터를 생성합니다.
 
@@ -28,10 +32,6 @@ Claude AI가 한글 설명을 분석하여 자동으로 지형 파라미터를 �
 - 눈/바위/풀 색상 및 높이 임계값
 - 기후, 습도, 식생 밀도 등
 
-
-
-<!-- 스크린샷: Terrain 생성 폼 - "눈 덮인 산악 지형" 입력 예시 -->
-
 ### 2. 🎨 그림판 스타일 도로 배치
 Terrain preview 이미지 위에 마우스로 직접 도로를 그리면, Ramer-Douglas-Peucker 알고리즘이 자동으로 경로를 최적화합니다.
 
@@ -41,6 +41,8 @@ Terrain preview 이미지 위에 마우스로 직접 도로를 그리면, Ramer-
 - 🟢 자동 Control Points 추출 (녹색 점)
 - 📐 수백 개 점 → 20개 이하로 자동 단순화
 
+
+
 ![Main Demo](assets/md/r2.png)
 
 - 생성된 도로 preview
@@ -48,8 +50,6 @@ Terrain preview 이미지 위에 마우스로 직접 도로를 그리면, Ramer-
 ![Main Demo](assets/md/r3.png)
 
 - 생성된 blend 파일 다운로드 가능
-
-<!-- 스크린샷: Road Modal - Canvas 위에 빨간 선 + 녹색 점 표시 -->
 
 ### 3. 🛣️ 자동 UV Texturing
 차선 텍스처가 도로 방향에 맞춰 자동으로 정렬됩니다.
@@ -60,7 +60,6 @@ Terrain preview 이미지 위에 마우스로 직접 도로를 그리면, Ramer-
 - 10 segments로 정확한 UV 구조
 
 ![Main Demo](assets/md/r4.png)
-<!-- 스크린샷: Blender에서 연 Road - 차선이 정확히 정렬된 모습 -->
 
 ### 4. 📸 갤러리 기반 UI
 생성한 지형과 도로를 한눈에 확인하고 관리할 수 있습니다.
