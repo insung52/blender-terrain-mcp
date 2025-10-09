@@ -471,7 +471,7 @@ MIT License
 
 ---
 
-## 🎉 감사의 말
+## 활용한 서비스
 
 - **Blender Foundation** - 오픈소스 3D 소프트웨어
 - **Anthropic** - Claude AI API
