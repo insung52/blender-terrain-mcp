@@ -5,9 +5,17 @@ import { prisma } from './db/client';
 import { blenderQueue } from './queue/blenderQueue';
 import { analyzeTerrainDescription } from './services/claudeService';
 import path from 'path';
+import fs from 'fs';
 
 const app = express();
 const PORT = 3000;
+
+// Ensure output directory exists
+const outputDir = path.join(process.cwd(), 'output');
+if (!fs.existsSync(outputDir)) {
+  fs.mkdirSync(outputDir, { recursive: true });
+  console.log('📁 Created output directory');
+}
 
 // Middleware
 app.use(cors());

@@ -151,7 +151,7 @@ mesh = curve_obj.data
 # 동적 스케일 계산: 도로 길이 기반
 # 기준: 1966.8m → 200x 스케일 (텍스처 반복)
 # 공식: scale = (total_length / 10.0) → 도로 10m당 텍스처 1회 반복
-y_scale_factor = total_length / 10.0 * 3.0
+y_scale_factor = total_length / 10.0 * 6.0
 
 print(
     f"[Road] Adjusting UV coordinates (rotate 90° + scale Y {y_scale_factor:.1f}x)..."

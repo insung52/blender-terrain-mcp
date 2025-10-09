@@ -2,6 +2,6 @@
 node_modules
 nul
 /src/generated/prisma
-output
+output/
 .env
 log
