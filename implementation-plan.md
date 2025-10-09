@@ -1051,3 +1051,554 @@ curl http://localhost:3000/api/job/<job-id>
 5. **웹 UI 개선**: Preview 이미지, Terrain ID 복사 등
 
 **총 실제 소요 시간: 약 5-6시간** (Stage 0-10 포함)
+
+---
+
+## Stage 11: Road UV Texturing 자동화 (2025-10-09)
+
+### 목표
+수동으로 하던 Road 텍스처 UV 매핑을 자동화하여 차선 텍스처가 자동으로 적용되도록 구현
+
+### 문제점 분석
+**기존 방식 (road_texture.md)**:
+1. Blender UV Editor에서 수동으로 10개 사각형 선택
+2. Follow Active Quads (FAQ) 실행
+3. X축, Y축 정렬 수동 조정
+4. 스케일/위치를 텍스처에 맞게 수동 조정
+5. 매우 번거롭고 자동화 불가능
+
+**발견된 문제**:
+- Background mode에서 `bpy.ops.uv.follow_active_quads()` 동작 안 함 (No UI context)
+- Round bevel 사용으로 10개 쿼드가 UV에서 20개로 보임 (원통형 구조)
+- Curve-to-Mesh 변환 시 자동 생성되는 UV가 이미 존재
+
+### 해결 방법
+
+#### 1. Curve 자동 UV 활용
+**핵심 발견**:
+- Blender의 Curve-to-Mesh 변환이 자동으로 parameterized UV 생성
+- FAQ 없이도 이미 UV가 올바르게 정렬되어 있음
+
+#### 2. 평면 Bevel Profile 사용
+**문제**: Round bevel이 원통형 메시 생성 → UV에서 20개 쿼드로 보임
+
+**해결** (src/blender-scripts/road_generator.py):
+```python
+# 수정 전: Round bevel
+curve_data.bevel_depth = road_width / 2  # 원통형
+
+# 수정 후: 평면 Bevel Object
+bevel_curve_data = bpy.data.curves.new("RoadProfile", type="CURVE")
+bevel_curve_data.dimensions = "2D"
+bevel_spline = bevel_curve_data.splines.new("POLY")
+
+# 11점으로 10 segments 생성 (폭 방향)
+num_segments = 10
+bevel_spline.points.add(num_segments)
+half_width = road_width / 2
+for i in range(num_segments + 1):
+    x = -half_width + (i * road_width / num_segments)
+    bevel_spline.points[i].co = (x, 0, 0, 1)
+
+bevel_obj = bpy.data.objects.new("RoadProfile", bevel_curve_data)
+curve_data.bevel_mode = "OBJECT"
+curve_data.bevel_object = bevel_obj
+```
+
+**결과**:
+- 진짜 평면 도로 생성 (원통형 아님)
+- UV에서 정확히 10개 쿼드로 보임
+
+#### 3. UV 좌표 자동 변환
+**요구사항**:
+- 90도 회전 필요
+- Y축 동적 스케일 (도로 길이 기반)
+
+**구현** (src/blender-scripts/road_generator.py):
+```python
+# UV 좌표 조정: 90도 회전 + Y축 동적 스케일
+y_scale_factor = total_length / 10.0  # 도로 10m당 텍스처 1회 반복
+
+bpy.ops.object.mode_set(mode="EDIT")
+bm = bmesh.from_edit_mesh(mesh)
+uv_layer = bm.loops.layers.uv.active
+
+if uv_layer:
+    for face in bm.faces:
+        for loop in face.loops:
+            uv = loop[uv_layer].uv
+            u, v = uv.x, uv.y
+
+            # 90도 회전: (u, v) -> (-v, u)
+            # Y축 동적 스케일
+            uv.x = -v
+            uv.y = u * y_scale_factor
+
+    bmesh.update_edit_mesh(mesh)
+```
+
+**동적 스케일 공식**:
+- 예: 1966.8m 도로 → `1966.8 / 10 = 196.68x` 스케일
+- 도로 길이에 비례하여 텍스처 반복 횟수 자동 조정
+
+#### 4. 텍스처 이미지 적용
+**Material 노드 설정**:
+```python
+# Material 생성
+material = bpy.data.materials.new(name="RoadMaterial")
+material.use_nodes = True
+nodes = material.node_tree.nodes
+links = material.node_tree.links
+
+# Image Texture 노드
+tex_image = nodes.new('ShaderNodeTexImage')
+tex_image.image = bpy.data.images.load(texture_path)
+
+# Principled BSDF 연결
+bsdf = nodes.get('Principled BSDF')
+links.new(tex_image.outputs['Color'], bsdf.inputs['Base Color'])
+```
+
+### 테스트 결과
+```bash
+# 도로 생성
+curl -X POST http://localhost:3000/api/road \
+  -d '{"terrainId":"<terrain-id>","controlPoints":[[10,10],[50,30],[90,80]]}' \
+  -H "Content-Type: application/json"
+
+# ✅ 결과
+- 평면 도로 메시 생성
+- UV 자동으로 90도 회전 + 동적 스케일
+- 차선 텍스처 정확히 적용
+- Follow Active Quads 없이 완전 자동화
+```
+
+### 성공 조건
+- ✅ 평면 bevel profile로 진짜 평면 도로 생성
+- ✅ 10 segments로 정확한 UV 구조
+- ✅ UV 자동 회전 및 동적 스케일링
+- ✅ Background mode에서 완전 자동화
+- ✅ 텍스처 정확히 정렬 (차선이 도로 방향과 일치)
+
+---
+
+## Stage 12: 웹 UI 대규모 개선 (2025-10-09)
+
+### 목표
+사용자 친화적인 갤러리 기반 UI로 전면 개선 + 그림판 스타일 Road 그리기 기능
+
+### 주요 변경사항
+
+#### 1. Terrain ID 직접 입력 → 갤러리 선택 방식
+
+**변경 전**:
+```tsx
+<input
+  type="text"
+  placeholder="terrain-id-from-job"
+  onChange={(e) => setRoadTerrainId(e.target.value)}
+/>
+```
+
+**변경 후**:
+```tsx
+// Terrain Gallery 카드 형태
+<div className="terrain-card" onClick={() => selectTerrain(terrain)}>
+  <img src={terrain.topViewPath} />
+  <h4>{terrain.description}</h4>
+  <button onClick={() => createRoadForTerrain(terrain)}>
+    🛣️ Add Road
+  </button>
+  <button onClick={() => deleteTerrain(terrain.id)}>
+    🗑️ Delete
+  </button>
+</div>
+```
+
+**서버 API 추가**:
+```typescript
+// GET /api/terrains - 최근 50개 terrain 목록
+app.get('/api/terrains', async (req, res) => {
+  const terrains = await prisma.terrain.findMany({
+    orderBy: { createdAt: 'desc' },
+    take: 50
+  });
+  res.json({ success: true, terrains });
+});
+```
+
+#### 2. Road Gallery 추가
+
+**새로운 섹션**:
+```tsx
+// Road Gallery - Terrain + Road 결과물 표시
+<div className="section">
+  <h2>3. Road Gallery</h2>
+  {roads.map(road => (
+    <div className="road-card">
+      <img src={road.previewPath} />
+      <h4>Road on {road.terrain.description}</h4>
+      <p>Control Points: {road.controlPoints.length}</p>
+      <button onClick={() => deleteRoad(road.id)}>🗑️ Delete</button>
+    </div>
+  ))}
+</div>
+```
+
+**서버 API 추가**:
+```typescript
+// GET /api/roads - 모든 road 목록
+app.get('/api/roads', async (req, res) => {
+  const roads = await prisma.road.findMany({
+    include: { terrain: true },
+    orderBy: { createdAt: 'desc' },
+    take: 50
+  });
+  res.json({ success: true, roads });
+});
+```
+
+#### 3. Job Status → 팝업 모달 방식
+
+**변경 전**: 별도 섹션에서 Job ID 입력
+
+**변경 후**:
+- Terrain/Road 이미지 클릭 시 팝업 표시
+- X 버튼 + 외부 클릭으로 닫기
+- 스크롤 없이 정보 확인
+
+**구현**:
+```tsx
+// Terrain 이미지 클릭 시
+<img onClick={() => showJobDetails(terrain)} />
+
+// Job Details Modal
+{showJobModal && (
+  <div className="modal-overlay" onClick={() => setShowJobModal(false)}>
+    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+      <h2>Job Details <button onClick={close}>✕</button></h2>
+      <p>Status: {job.status}</p>
+      <img src={job.terrain.topViewPath} />
+      <a href={job.terrain.blendFilePath} download>Download .blend</a>
+    </div>
+  </div>
+)}
+```
+
+**서버 API 추가**:
+```typescript
+// Terrain ID로 Job 조회
+app.get('/api/job/terrain/:terrainId', async (req, res) => {
+  const job = await prisma.job.findFirst({
+    where: { terrain: { id: req.params.terrainId } },
+    include: { terrain: true, road: true }
+  });
+  res.json({ success: true, job });
+});
+
+// Road ID로 Job 조회
+app.get('/api/job/road/:roadId', async (req, res) => {
+  const job = await prisma.job.findFirst({
+    where: { road: { id: req.params.roadId } },
+    include: { terrain: true, road: true }
+  });
+  res.json({ success: true, job });
+});
+```
+
+#### 4. 파일 삭제 기능 구현
+
+**문제**: DB만 삭제되고 실제 파일은 남아있음
+
+**해결**:
+```typescript
+// DELETE /api/terrain/:terrainId
+app.delete('/api/terrain/:terrainId', async (req, res) => {
+  const terrain = await prisma.terrain.findUnique({ where: { id: terrainId } });
+  const roads = await prisma.road.findMany({ where: { terrainId } });
+
+  // 모든 관련 파일 삭제
+  const fs = require('fs');
+
+  // Road 파일 삭제
+  for (const road of roads) {
+    if (road.blendFilePath && fs.existsSync(road.blendFilePath)) {
+      fs.unlinkSync(road.blendFilePath);
+    }
+    if (road.previewPath && fs.existsSync(road.previewPath)) {
+      fs.unlinkSync(road.previewPath);
+    }
+  }
+
+  // Terrain 파일 삭제
+  if (terrain.blendFilePath && fs.existsSync(terrain.blendFilePath)) {
+    fs.unlinkSync(terrain.blendFilePath);
+  }
+  if (terrain.topViewPath && fs.existsSync(terrain.topViewPath)) {
+    fs.unlinkSync(terrain.topViewPath);
+  }
+
+  // DB 레코드 삭제
+  await prisma.road.deleteMany({ where: { terrainId } });
+  await prisma.terrain.delete({ where: { id: terrainId } });
+
+  res.json({ success: true, message: 'Terrain and files deleted' });
+});
+
+// DELETE /api/road/:roadId - 동일한 방식
+```
+
+#### 5. 그림판 스타일 Road 그리기 기능
+
+**목표**: Preview 이미지 위에 직접 마우스로 도로 경로 그리기
+
+**Ramer-Douglas-Peucker 알고리즘 구현**:
+```typescript
+// client/src/utils/simplifyPath.ts
+export function simplifyPath(points: Point[], epsilon: number = 5.0): Point[] {
+  if (points.length <= 2) return points;
+
+  // 시작-끝 선분에서 가장 먼 점 찾기
+  let maxDistance = 0;
+  let maxIndex = 0;
+  for (let i = 1; i < points.length - 1; i++) {
+    const distance = perpendicularDistance(points[i], points[0], points[points.length-1]);
+    if (distance > maxDistance) {
+      maxDistance = distance;
+      maxIndex = i;
+    }
+  }
+
+  // 재귀적으로 단순화
+  if (maxDistance > epsilon) {
+    const left = simplifyPath(points.slice(0, maxIndex + 1), epsilon);
+    const right = simplifyPath(points.slice(maxIndex), epsilon);
+    return [...left.slice(0, -1), ...right];
+  } else {
+    return [points[0], points[points.length - 1]];
+  }
+}
+
+// 하이브리드 방식: 거리 기반 + RDP 알고리즘
+export function simplifyDrawnPath(points: Point[], options = {}) {
+  const { minDistance = 5, epsilon = 3, maxPoints = 20 } = options;
+
+  // 1. 너무 가까운 점 제거
+  let simplified = thinByDistance(points, minDistance);
+
+  // 2. RDP 알고리즘 적용
+  simplified = simplifyPath(simplified, epsilon);
+
+  // 3. 최대 개수 제한
+  while (simplified.length > maxPoints) {
+    epsilon *= 1.5;
+    simplified = simplifyPath(points, epsilon);
+  }
+
+  return simplified;
+}
+```
+
+**Canvas 그리기 UI**:
+```tsx
+// Road Modal - 2가지 모드
+<div className="mode-toggle">
+  <button onClick={() => setIsDrawingMode(true)}>🎨 Draw Mode</button>
+  <button onClick={() => setIsDrawingMode(false)}>⌨️ Manual Input</button>
+</div>
+
+{isDrawingMode ? (
+  // Canvas 그리기
+  <canvas
+    ref={canvasRef}
+    width={500}
+    height={500}
+    onMouseDown={handleCanvasMouseDown}
+    onMouseMove={handleCanvasMouseMove}
+    onMouseUp={handleCanvasMouseUp}
+    style={{ cursor: 'crosshair' }}
+  />
+) : (
+  // JSON 직접 입력 (하위 호환)
+  <textarea
+    value={roadPoints}
+    onChange={(e) => setRoadPoints(e.target.value)}
+    placeholder="[[10,10],[50,30],[90,80]]"
+  />
+)}
+```
+
+**마우스 이벤트 처리**:
+```tsx
+const handleCanvasMouseDown = (e) => {
+  setIsDrawing(true);
+  const rect = canvas.getBoundingClientRect();
+  // 캔버스 크기 보정
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const x = (e.clientX - rect.left) * scaleX;
+  const y = (e.clientY - rect.top) * scaleY;
+  setDrawnPoints([[x, y]]);
+};
+
+const handleCanvasMouseMove = (e) => {
+  if (!isDrawing) return;
+  const x = (e.clientX - rect.left) * scaleX;
+  const y = (e.clientY - rect.top) * scaleY;
+  setDrawnPoints(prev => [...prev, [x, y]]);
+};
+
+const handleCanvasMouseUp = () => {
+  setIsDrawing(false);
+
+  // RDP 알고리즘으로 단순화
+  const simplified = simplifyDrawnPath(drawnPoints, {
+    minDistance: 5,
+    epsilon: 3,
+    maxPoints: 20
+  });
+
+  // 캔버스 좌표 (500x500) → 지형 좌표 (100x100)
+  const scaled = simplified.map(([x, y]) => [
+    Math.round(x * 100 / 500),
+    Math.round(y * 100 / 500)
+  ]);
+
+  setRoadPoints(JSON.stringify(scaled));
+};
+```
+
+**Canvas 렌더링 (Preview + 그린 경로 + Control Points)**:
+```tsx
+useEffect(() => {
+  const canvas = canvasRef.current;
+  const ctx = canvas.getContext('2d');
+
+  // 1. Terrain preview 이미지
+  const img = new Image();
+  img.src = `${API_URL}/output/${modalTerrain.topViewPath}`;
+  img.onload = () => {
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    // 2. 그린 경로 (빨간 선)
+    if (drawnPoints.length > 1) {
+      ctx.strokeStyle = '#FF0000';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(drawnPoints[0][0], drawnPoints[0][1]);
+      for (let i = 1; i < drawnPoints.length; i++) {
+        ctx.lineTo(drawnPoints[i][0], drawnPoints[i][1]);
+      }
+      ctx.stroke();
+    }
+
+    // 3. Control points (녹색 점)
+    const controlPoints = JSON.parse(roadPoints);
+    ctx.fillStyle = '#00FF00';
+    ctx.strokeStyle = '#006600';
+    const scaleX = canvas.width / 100;
+    const scaleY = canvas.height / 100;
+    controlPoints.forEach(([x, y]) => {
+      ctx.beginPath();
+      ctx.arc(x * scaleX, y * scaleY, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    });
+  };
+}, [drawnPoints, modalTerrain, roadPoints]);
+```
+
+### UI/UX 개선
+
+#### 텍스트 색상 수정
+- 모든 모달 텍스트: 흰색 배경에 검은색 글씨 (`color: '#000'`)
+- Terrain Gallery 카드 제목: `color: '#333'`
+
+#### 캔버스 정사각형 비율
+```tsx
+<div style={{
+  aspectRatio: '1 / 1',
+  maxWidth: '500px',
+  margin: '0 auto'
+}}>
+  <canvas width={500} height={500} />
+</div>
+```
+
+#### 모달 UX 개선
+- 제목 옆 X 버튼 (스크롤 없이 항상 보임)
+- 외부 클릭으로 닫기
+- 하단 Close 버튼 제거 (불필요)
+
+### 테스트 결과
+```bash
+# 1. Terrain 생성
+curl -X POST http://localhost:3000/api/terrain \
+  -d '{"description":"눈 덮인 산악 지형","useAI":true}' \
+  -H "Content-Type: application/json"
+
+# 2. 웹 UI에서 Terrain Gallery 확인
+# → Terrain 카드 클릭 → Job Details 팝업 표시
+# → "Add Road" 버튼 클릭 → Canvas 모달 표시
+
+# 3. Canvas에 마우스로 도로 경로 그리기
+# → 빨간 선으로 경로 표시
+# → 마우스 떼면 자동으로 Control Points 추출 (녹색 점)
+# → JSON 자동 생성: [[10,10],[25,35],[50,60],...]
+
+# 4. Road 생성 버튼 클릭
+# → Road Gallery에 새 카드 추가
+# → Preview 이미지에 도로 표시
+```
+
+### 성공 조건
+- ✅ Terrain Gallery: 카드 형태로 직관적 선택
+- ✅ Road Gallery: 생성된 도로 결과물 표시
+- ✅ Job Details: 팝업으로 간편하게 확인
+- ✅ 파일 삭제: DB + 실제 파일 모두 삭제
+- ✅ Canvas 그리기: Preview 위에 마우스로 도로 그리기
+- ✅ RDP 알고리즘: 수백 개 점 → 20개 이하 Control Points
+- ✅ 정사각형 Canvas: 지형 비율 정확히 유지
+- ✅ 2가지 입력 방식: Draw Mode + Manual Input
+
+---
+
+## 최종 완료 상태 (2025-10-09)
+
+### ✅ 모든 Stage 완료
+- [x] **Stage 0-10**: 기본 시스템 + Terrain v2.0 + Road 생성 ✅
+- [x] **Stage 11**: Road UV Texturing 자동화 ✅
+  - 평면 bevel profile
+  - UV 자동 회전 + 동적 스케일
+  - 차선 텍스처 자동 적용
+- [x] **Stage 12**: 웹 UI 대규모 개선 ✅
+  - Terrain/Road Gallery
+  - Job Details 팝업
+  - 파일 삭제 기능
+  - Canvas 그리기 + RDP 알고리즘
+
+### 🎯 최종 기능 요약
+
+**Backend**:
+1. Terrain v2.0 (15+ 파라미터 + 머티리얼)
+2. Road 자동 UV Texturing
+3. Terrain/Road Gallery API
+4. 파일 삭제 (DB + 실제 파일)
+
+**Frontend**:
+1. Terrain Gallery (카드 + 프리뷰)
+2. Road Gallery (결과물 표시)
+3. Canvas 그리기 (RDP 알고리즘)
+4. Job Details 팝업
+5. 직관적 UI/UX
+
+**Blender Scripts**:
+1. `terrain_generator_v2.py` - 고급 지형 생성
+2. `road_generator.py` - 평면 도로 + UV 자동화
+
+**Algorithms**:
+1. Ramer-Douglas-Peucker (경로 단순화)
+2. 높이 기반 머티리얼 시스템
+3. UV 동적 스케일링
+
+**총 실제 소요 시간: 약 7-8시간** (Stage 0-12 포함)
