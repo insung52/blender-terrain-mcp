@@ -148,9 +148,6 @@ cd client && npm run dev
 # → http://localhost:5173
 ```
 
-![Running Application](assets/screenshots/running-app.png)
-<!-- 스크린샷: 브라우저에서 실행 중인 애플리케이션 -->
-
 ---
 
 ## 📖 사용 방법
@@ -163,17 +160,12 @@ cd client && npm run dev
 4. **"Create Terrain"** 버튼 클릭
 5. Job이 큐에 추가되고 백그라운드에서 처리됨
 
-![Step 1](assets/screenshots/step1-create-terrain.png)
-<!-- 스크린샷: Terrain 생성 폼 작성 화면 -->
 
 ### Step 2: Terrain 확인
 
 1. **"2. Terrain Gallery"** 섹션에서 생성된 지형 확인
 2. 카드 이미지 클릭 → **Job Details** 팝업 표시
 3. Status, Preview 이미지, .blend 파일 다운로드 링크 확인
-
-![Step 2](assets/screenshots/step2-terrain-gallery.png)
-<!-- 스크린샷: Terrain Gallery 카드들 + Job Details 팝업 -->
 
 ### Step 3: Road 그리기
 
@@ -186,15 +178,9 @@ cd client && npm run dev
 5. **"Clear Drawing"** 버튼으로 다시 그리기 가능
 6. **"🛣️ Create Road"** 버튼 클릭
 
-![Step 3](assets/screenshots/step3-draw-road.png)
-<!-- 스크린샷: Road Modal - Canvas에 빨간 선과 녹색 점이 표시된 모습 -->
-
 **Alternative: Manual Input**
 - **"⌨️ Manual Input"** 탭 선택
 - JSON 형식으로 직접 입력: `[[10,10],[50,30],[90,80]]`
-
-![Step 3 Alt](assets/screenshots/step3-manual-input.png)
-<!-- 스크린샷: Manual Input 탭 - JSON 입력 화면 -->
 
 ### Step 4: Road 결과 확인
 
@@ -202,18 +188,12 @@ cd client && npm run dev
 2. Preview 이미지에서 지형 위 도로 확인
 3. .blend 파일 다운로드하여 Blender에서 열기
 
-![Step 4](assets/screenshots/step4-road-gallery.png)
-<!-- 스크린샷: Road Gallery - 도로가 생성된 지형들 -->
-
 ### Step 5: Blender에서 확인
 
 다운로드한 `.blend` 파일을 Blender에서 열어 3D 뷰로 확인:
 - 지형 높낮이에 맞춰 도로가 배치됨
 - 차선 텍스처가 정확히 정렬됨
 - 10 segments로 세밀한 메시 구조
-
-![Step 5](assets/screenshots/step5-blender-result.png)
-<!-- 스크린샷: Blender에서 연 최종 결과물 - 3D 뷰 -->
 
 ---
 
@@ -481,18 +461,6 @@ redis-cli
 ## 📝 라이선스
 
 MIT License
-
----
-
-## 🤝 기여
-
-PR은 언제나 환영합니다!
-
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
 
 ---
 
