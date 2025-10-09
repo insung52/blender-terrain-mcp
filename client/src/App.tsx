@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import './App.css';
+import { simplifyDrawnPath } from './utils/simplifyPath';
 
 interface Terrain {
   id: string;
@@ -42,6 +43,10 @@ function App() {
   const [showRoadModal, setShowRoadModal] = useState(false);
   const [showJobModal, setShowJobModal] = useState(false);
   const [modalTerrain, setModalTerrain] = useState<Terrain | null>(null);
+  const [isDrawingMode, setIsDrawingMode] = useState(true);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [drawnPoints, setDrawnPoints] = useState<[number, number][]>([]);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const [jobId, setJobId] = useState('');
   const [job, setJob] = useState<Job | null>(null);
@@ -237,14 +242,137 @@ function App() {
     setModalTerrain(terrain);
     setRoadTerrainId(terrain.id);
     setRoadPoints('[[10,10],[80,50],[50,30],[90,80],[70,50]]');
+    setDrawnPoints([]);
+    setIsDrawingMode(true);
     setShowRoadModal(true);
   };
 
   const handleRoadModalSubmit = async () => {
     await createRoad();
     setShowRoadModal(false);
+    setDrawnPoints([]);
     loadRoads();
   };
+
+  const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawingMode) return;
+    setIsDrawing(true);
+    const canvas = e.currentTarget;
+    const rect = canvas.getBoundingClientRect();
+    // Scale from display size to actual canvas size
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+    setDrawnPoints([[x, y]]);
+  };
+
+  const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawing || !isDrawingMode) return;
+    const canvas = e.currentTarget;
+    const rect = canvas.getBoundingClientRect();
+    // Scale from display size to actual canvas size
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+    setDrawnPoints(prev => [...prev, [x, y]]);
+  };
+
+  const handleCanvasMouseUp = () => {
+    if (!isDrawing) return;
+    setIsDrawing(false);
+
+    // Simplify the drawn path and convert to control points
+    if (drawnPoints.length > 2) {
+      const simplified = simplifyDrawnPath(drawnPoints, {
+        minDistance: 5,
+        epsilon: 3,
+        maxPoints: 20
+      });
+
+      // Scale to terrain coordinates (assume 100x100 terrain, 500x500 canvas)
+      const scaled = simplified.map(([x, y]) => {
+        const scaleX = 100 / 500; // canvas width to terrain
+        const scaleY = 100 / 500; // canvas height to terrain
+        return [Math.round(x * scaleX), Math.round(y * scaleY)];
+      });
+
+      setRoadPoints(JSON.stringify(scaled));
+    }
+  };
+
+  const clearDrawing = () => {
+    setDrawnPoints([]);
+    setRoadPoints('[[10,10],[80,50],[50,30],[90,80],[70,50]]');
+  };
+
+  // Draw on canvas
+  useEffect(() => {
+    if (!canvasRef.current || !modalTerrain || !isDrawingMode) return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Clear canvas first
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw terrain preview image
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = `${API_URL}/output/${modalTerrain.topViewPath?.split('\\').pop()}`;
+
+    img.onerror = () => {
+      // If image fails to load, just show gray background
+      ctx.fillStyle = '#e0e0e0';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      redrawPath();
+    };
+
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      redrawPath();
+    };
+
+    function redrawPath() {
+      if (!ctx) return;
+
+      // Draw the drawn path (red line)
+      if (drawnPoints.length > 1) {
+        ctx.strokeStyle = '#FF0000';
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(drawnPoints[0][0], drawnPoints[0][1]);
+        for (let i = 1; i < drawnPoints.length; i++) {
+          ctx.lineTo(drawnPoints[i][0], drawnPoints[i][1]);
+        }
+        ctx.stroke();
+      }
+
+      // Draw control points (green dots)
+      try {
+        const controlPoints = JSON.parse(roadPoints);
+        if (Array.isArray(controlPoints) && controlPoints.length > 0) {
+          ctx.fillStyle = '#00FF00';
+          ctx.strokeStyle = '#006600';
+          ctx.lineWidth = 2;
+          const scaleX = canvas.width / 100;
+          const scaleY = canvas.height / 100;
+          controlPoints.forEach(([x, y]: [number, number]) => {
+            ctx.beginPath();
+            ctx.arc(x * scaleX, y * scaleY, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+          });
+        }
+      } catch (e) {
+        // Invalid JSON, ignore
+      }
+    }
+  }, [drawnPoints, modalTerrain, roadPoints, API_URL, isDrawingMode]);
 
   const showJobDetails = async (terrain: Terrain) => {
     setLoading(true);
@@ -628,47 +756,158 @@ function App() {
                 borderRadius: '4px',
                 marginBottom: '1rem'
               }}>
-                <p style={{ margin: '0.5rem 0', fontSize: '0.9em' }}>
+                <p style={{ margin: '0.5rem 0', fontSize: '0.9em', color: '#000' }}>
                   Terrain: <strong>{modalTerrain.description || 'Untitled'}</strong>
                 </p>
               </div>
             )}
 
-            <div className="form">
-              <label>
-                Control Points (JSON):
-                <textarea
-                  value={roadPoints}
-                  onChange={(e) => setRoadPoints(e.target.value)}
-                  placeholder="[[10,10],[50,30],[90,80]]"
-                  style={{
-                    width: '100%',
-                    minHeight: '100px',
-                    padding: '8px',
-                    fontFamily: 'monospace',
-                    fontSize: '0.9em'
-                  }}
-                />
-              </label>
-
+            {/* Mode Toggle */}
+            <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem' }}>
               <button
-                onClick={handleRoadModalSubmit}
-                disabled={loading}
+                onClick={() => setIsDrawingMode(true)}
                 style={{
-                  width: '100%',
-                  marginTop: '1rem',
-                  padding: '0.75rem',
-                  backgroundColor: '#4CAF50',
-                  color: 'white',
+                  flex: 1,
+                  padding: '0.5rem',
+                  backgroundColor: isDrawingMode ? '#4CAF50' : '#ddd',
+                  color: isDrawingMode ? 'white' : '#333',
                   border: 'none',
                   borderRadius: '4px',
                   cursor: 'pointer',
-                  fontSize: '1rem'
+                  fontWeight: isDrawingMode ? 'bold' : 'normal'
                 }}
               >
-                {loading ? 'Creating...' : 'Create Road'}
+                🎨 Draw Mode
+              </button>
+              <button
+                onClick={() => setIsDrawingMode(false)}
+                style={{
+                  flex: 1,
+                  padding: '0.5rem',
+                  backgroundColor: !isDrawingMode ? '#4CAF50' : '#ddd',
+                  color: !isDrawingMode ? 'white' : '#333',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontWeight: !isDrawingMode ? 'bold' : 'normal'
+                }}
+              >
+                ⌨️ Manual Input
               </button>
             </div>
+
+            {/* Drawing Canvas */}
+            {isDrawingMode ? (
+              <div>
+                <div style={{
+                  border: '2px solid #4CAF50',
+                  borderRadius: '4px',
+                  overflow: 'hidden',
+                  backgroundColor: '#f0f0f0',
+                  aspectRatio: '1 / 1',
+                  maxWidth: '500px',
+                  margin: '0 auto'
+                }}>
+                  <canvas
+                    ref={canvasRef}
+                    width={500}
+                    height={500}
+                    onMouseDown={handleCanvasMouseDown}
+                    onMouseMove={handleCanvasMouseMove}
+                    onMouseUp={handleCanvasMouseUp}
+                    onMouseLeave={handleCanvasMouseUp}
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      height: '100%',
+                      cursor: 'crosshair'
+                    }}
+                  />
+                </div>
+                <div style={{ marginTop: '0.5rem', fontSize: '0.85em', color: '#666' }}>
+                  💡 Click and drag to draw a road path on the terrain
+                </div>
+                <button
+                  onClick={clearDrawing}
+                  style={{
+                    marginTop: '0.5rem',
+                    padding: '0.5rem 1rem',
+                    backgroundColor: '#ff9800',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '0.9em'
+                  }}
+                >
+                  Clear Drawing
+                </button>
+              </div>
+            ) : (
+              <div className="form">
+                <label>
+                  Control Points (JSON):
+                  <textarea
+                    value={roadPoints}
+                    onChange={(e) => setRoadPoints(e.target.value)}
+                    placeholder="[[10,10],[50,30],[90,80]]"
+                    style={{
+                      width: '100%',
+                      minHeight: '150px',
+                      padding: '8px',
+                      fontFamily: 'monospace',
+                      fontSize: '0.9em',
+                      border: '1px solid #ddd',
+                      borderRadius: '4px'
+                    }}
+                  />
+                </label>
+                <div style={{ marginTop: '0.5rem', fontSize: '0.85em', color: '#666' }}>
+                  💡 Enter control points as JSON array: [[x1,y1],[x2,y2],...]
+                </div>
+              </div>
+            )}
+
+            {/* Control Points Preview */}
+            <div style={{
+              marginTop: '1rem',
+              padding: '0.5rem',
+              backgroundColor: '#f5f5f5',
+              borderRadius: '4px',
+              fontSize: '0.85em',
+              color: '#000'
+            }}>
+              <strong>Current Control Points:</strong>
+              <div style={{
+                marginTop: '0.25rem',
+                fontFamily: 'monospace',
+                wordBreak: 'break-all',
+                maxHeight: '60px',
+                overflow: 'auto',
+                color: '#000'
+              }}>
+                {roadPoints}
+              </div>
+            </div>
+
+            <button
+              onClick={handleRoadModalSubmit}
+              disabled={loading}
+              style={{
+                width: '100%',
+                marginTop: '1rem',
+                padding: '0.75rem',
+                backgroundColor: '#4CAF50',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '1rem',
+                fontWeight: 'bold'
+              }}
+            >
+              {loading ? 'Creating...' : '🛣️ Create Road'}
+            </button>
           </div>
         </div>
       )}

@@ -134,7 +134,7 @@ modifier.wrap_method = "PROJECT"  # PROJECT 방식
 modifier.use_project_z = True
 modifier.use_negative_direction = True  # 아래로만 투영 (Z=10000 → 지형)
 modifier.use_positive_direction = False  # 위로는 투영 안함
-modifier.offset = 0.2  # 지형 위 20cm
+modifier.offset = 0.05  # 지형 위 20cm
 
 # 6. Curve를 Mesh로 변환 (UV 좌표 자동 생성됨)
 print(f"[Road] Converting curve to mesh...")

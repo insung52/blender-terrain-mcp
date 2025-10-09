@@ -235,17 +235,76 @@ app.delete('/api/terrain/:terrainId', async (req, res) => {
   try {
     const { terrainId } = req.params;
 
-    // Delete related roads first
+    // Get terrain data first to delete files
+    const terrain = await prisma.terrain.findUnique({
+      where: { id: terrainId }
+    });
+
+    if (!terrain) {
+      return res.status(404).json({ success: false, error: 'Terrain not found' });
+    }
+
+    // Delete related roads and their files
+    const roads = await prisma.road.findMany({
+      where: { terrainId }
+    });
+
+    for (const road of roads) {
+      // Delete road files
+      if (road.blendFilePath) {
+        try {
+          const fs = require('fs');
+          if (fs.existsSync(road.blendFilePath)) {
+            fs.unlinkSync(road.blendFilePath);
+          }
+        } catch (err) {
+          console.error(`Failed to delete road blend file: ${road.blendFilePath}`, err);
+        }
+      }
+      if (road.previewPath) {
+        try {
+          const fs = require('fs');
+          if (fs.existsSync(road.previewPath)) {
+            fs.unlinkSync(road.previewPath);
+          }
+        } catch (err) {
+          console.error(`Failed to delete road preview: ${road.previewPath}`, err);
+        }
+      }
+    }
+
+    // Delete roads from DB
     await prisma.road.deleteMany({
       where: { terrainId }
     });
 
-    // Delete terrain
+    // Delete terrain files
+    const fs = require('fs');
+    if (terrain.blendFilePath) {
+      try {
+        if (fs.existsSync(terrain.blendFilePath)) {
+          fs.unlinkSync(terrain.blendFilePath);
+        }
+      } catch (err) {
+        console.error(`Failed to delete terrain blend file: ${terrain.blendFilePath}`, err);
+      }
+    }
+    if (terrain.topViewPath) {
+      try {
+        if (fs.existsSync(terrain.topViewPath)) {
+          fs.unlinkSync(terrain.topViewPath);
+        }
+      } catch (err) {
+        console.error(`Failed to delete terrain preview: ${terrain.topViewPath}`, err);
+      }
+    }
+
+    // Delete terrain from DB
     await prisma.terrain.delete({
       where: { id: terrainId }
     });
 
-    res.json({ success: true, message: 'Terrain deleted' });
+    res.json({ success: true, message: 'Terrain and files deleted' });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -256,12 +315,42 @@ app.delete('/api/road/:roadId', async (req, res) => {
   try {
     const { roadId } = req.params;
 
-    // Delete road
+    // Get road data first to delete files
+    const road = await prisma.road.findUnique({
+      where: { id: roadId }
+    });
+
+    if (!road) {
+      return res.status(404).json({ success: false, error: 'Road not found' });
+    }
+
+    // Delete road files
+    const fs = require('fs');
+    if (road.blendFilePath) {
+      try {
+        if (fs.existsSync(road.blendFilePath)) {
+          fs.unlinkSync(road.blendFilePath);
+        }
+      } catch (err) {
+        console.error(`Failed to delete road blend file: ${road.blendFilePath}`, err);
+      }
+    }
+    if (road.previewPath) {
+      try {
+        if (fs.existsSync(road.previewPath)) {
+          fs.unlinkSync(road.previewPath);
+        }
+      } catch (err) {
+        console.error(`Failed to delete road preview: ${road.previewPath}`, err);
+      }
+    }
+
+    // Delete road from DB
     await prisma.road.delete({
       where: { id: roadId }
     });
 
-    res.json({ success: true, message: 'Road deleted' });
+    res.json({ success: true, message: 'Road and files deleted' });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
