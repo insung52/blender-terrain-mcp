@@ -43,9 +43,12 @@ Terrain preview 이미지 위에 마우스로 직접 도로를 그리면, Ramer-
 
 ![Main Demo](assets/md/r2.png)
 
-생성된 도로 preview
+- 생성된 도로 preview
 
 ![Main Demo](assets/md/r3.png)
+
+- 생성된 blend 파일 다운로드 가능
+
 <!-- 스크린샷: Road Modal - Canvas 위에 빨간 선 + 녹색 점 표시 -->
 
 ### 3. 🛣️ 자동 UV Texturing
