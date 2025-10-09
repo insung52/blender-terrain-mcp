@@ -159,6 +159,114 @@ app.get('/api/job/:jobId', async (req, res) => {
   }
 });
 
+// Get job by terrain ID
+app.get('/api/job/terrain/:terrainId', async (req, res) => {
+  try {
+    const job = await prisma.job.findFirst({
+      where: {
+        terrain: { id: req.params.terrainId }
+      },
+      include: { terrain: true, road: true },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    if (!job) {
+      return res.status(404).json({ success: false, error: 'Job not found' });
+    }
+
+    res.json({ success: true, job });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get job by road ID
+app.get('/api/job/road/:roadId', async (req, res) => {
+  try {
+    const job = await prisma.job.findFirst({
+      where: {
+        road: { id: req.params.roadId }
+      },
+      include: { terrain: true, road: true },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    if (!job) {
+      return res.status(404).json({ success: false, error: 'Job not found' });
+    }
+
+    res.json({ success: true, job });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get all completed terrains
+app.get('/api/terrains', async (req, res) => {
+  try {
+    const terrains = await prisma.terrain.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 50  // 최근 50개
+    });
+
+    res.json({ success: true, terrains });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get all roads
+app.get('/api/roads', async (req, res) => {
+  try {
+    const roads = await prisma.road.findMany({
+      include: { terrain: true },
+      orderBy: { createdAt: 'desc' },
+      take: 50
+    });
+
+    res.json({ success: true, roads });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Delete terrain
+app.delete('/api/terrain/:terrainId', async (req, res) => {
+  try {
+    const { terrainId } = req.params;
+
+    // Delete related roads first
+    await prisma.road.deleteMany({
+      where: { terrainId }
+    });
+
+    // Delete terrain
+    await prisma.terrain.delete({
+      where: { id: terrainId }
+    });
+
+    res.json({ success: true, message: 'Terrain deleted' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Delete road
+app.delete('/api/road/:roadId', async (req, res) => {
+  try {
+    const { roadId } = req.params;
+
+    // Delete road
+    await prisma.road.delete({
+      where: { id: roadId }
+    });
+
+    res.json({ success: true, message: 'Road deleted' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Terrain 생성 API
 app.post('/api/terrain', async (req, res) => {
   try {
