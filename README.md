@@ -89,7 +89,7 @@ Terrain preview 이미지 위에 마우스로 직접 도로를 그리면, Ramer-
 - **Redis** 6.0+
 - **Blender** 4.5+
 - **Claude API Key** (Anthropic)
-- **Docker Desktop**
+- **Docker Desktop** (선택)
 
 ### 1. 설치
 
