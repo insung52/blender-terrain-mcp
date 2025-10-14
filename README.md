@@ -95,7 +95,7 @@ Terrain preview 이미지 위에 마우스로 직접 도로를 그리면, Ramer-
 
 ```bash
 # 프로젝트 클론
-git clone https://github.com/yourusername/blender-terrain-mcp.git
+git clone https://github.com/insung52/blender-terrain-mcp.git
 cd blender-terrain-mcp
 
 # 패키지 설치
