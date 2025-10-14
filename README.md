@@ -107,6 +107,18 @@ cd client && npm install && cd ..
 
 ### 2. 환경 설정
 
+- Windows PowerShell 에서
+```bash
+@"
+DATABASE_URL="mysql://root:password@localhost:3306/blender_terrain"
+REDIS_HOST="localhost"
+REDIS_PORT=6379
+ANTHROPIC_API_KEY="your-api-key-here"
+BLENDER_PATH="C:\\Program Files\\Blender Foundation\\Blender 4.5\\blender.exe"
+"@ | Out-File -Encoding UTF8 .env
+```
+
+- 또는 리눅스 환경에서
 ```bash
 # .env 파일 생성
 cat > .env << EOF
@@ -118,7 +130,9 @@ BLENDER_PATH="C:\\Program Files\\Blender Foundation\\Blender 4.5\\blender.exe"
 EOF
 ```
 
-이후 Claude API Key 를 **'your-api-key-here'** 에 입력
+이후 mysql 비밀번호를 **password** 에 입력,
+Claude API Key 를 **'your-api-key-here'** 에 입력
+
 
 ### 3. 데이터베이스 설정
 
