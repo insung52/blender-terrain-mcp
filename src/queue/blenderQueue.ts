@@ -81,8 +81,8 @@ blenderQueue.process(2, async (job) => {
       return { success: true, outputPath, previewPath };
 
     } else if (type === 'road') {
-      // Road 생성
-      const scriptPath = path.join(process.cwd(), 'src', 'blender-scripts', 'road_generator.py');
+      // Road 생성 (logged version for debugging)
+      const scriptPath = path.join(process.cwd(), 'src', 'blender-scripts', 'road_generator_logged.py');
       const terrainBlendPath = params.terrainBlendPath;
       const outputPath = path.join(process.cwd(), 'output', `${dbJobId}.blend`);
       const previewPath = path.join(process.cwd(), 'output', `${dbJobId}_preview.png`);

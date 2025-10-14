@@ -288,11 +288,16 @@ bpy.ops.object.shade_smooth()
 
 # ===== 11. 카메라 설정 =====
 print(f"[Terrain v2] Setting up camera...")
-bpy.ops.object.camera_add(location=(0, 0, size * 1.8))
+# 정사각형 지형을 꽉 채우도록 카메라 설정
+camera_height = size * 1.5
+bpy.ops.object.camera_add(location=(0, 0, camera_height))
 camera = bpy.context.active_object
 camera.rotation_euler = (0, 0, 0)
-camera.data.clip_end = size * 5  # Far clip plane 설정 (충분히 멀리)
+camera.data.type = 'ORTHO'  # Orthographic 카메라 (왜곡 없는 top-down view)
+camera.data.ortho_scale = size * 1.0  # 지형 크기와 동일 (꽉 채우기)
+camera.data.clip_end = size * 5  # Far clip plane 설정
 bpy.context.scene.camera = camera
+print(f"[Terrain v2] Camera: Orthographic, scale={size}m")
 
 # ===== 12. 조명 =====
 print(f"[Terrain v2] Adding lighting...")

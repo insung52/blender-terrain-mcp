@@ -17,6 +17,11 @@ if (!fs.existsSync(outputDir)) {
   console.log('📁 Created output directory');
 }
 
+// Check API key on startup
+console.log('🔑 ANTHROPIC_API_KEY:', process.env.ANTHROPIC_API_KEY
+  ? `${process.env.ANTHROPIC_API_KEY.substring(0, 20)}... (${process.env.ANTHROPIC_API_KEY.length} chars)`
+  : 'NOT SET');
+
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -379,6 +384,7 @@ app.post('/api/terrain', async (req, res) => {
     // Claude AI 분석 사용 (useAI가 true이고 description이 있을 때)
     if (useAI && description && process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== 'your-api-key-here') {
       console.log(`[API] Analyzing terrain with Claude: "${description}"`);
+      console.log(`[API] Using API key: ${process.env.ANTHROPIC_API_KEY.substring(0, 20)}... (${process.env.ANTHROPIC_API_KEY.length} chars)`);
       try {
         const aiParams = await analyzeTerrainDescription(description);
         // v2.0: Claude의 모든 파라미터를 finalParams에 병합
@@ -386,10 +392,13 @@ app.post('/api/terrain', async (req, res) => {
           ...finalParams,
           ...aiParams  // 모든 v2 파라미터 포함
         };
-        console.log(`[API] Claude analysis result:`, aiParams);
+        console.log(`[API] Claude analysis SUCCESS:`, JSON.stringify(aiParams, null, 2));
       } catch (error: any) {
-        console.error(`[API] Claude analysis failed, using defaults:`, error.message);
+        console.error(`[API] Claude analysis FAILED:`, error.message);
+        console.error(`[API] Full error:`, error);
       }
+    } else {
+      console.log(`[API] Claude AI skipped - useAI: ${useAI}, description: ${!!description}, API key: ${!!process.env.ANTHROPIC_API_KEY}`);
     }
 
     // DB: Job 생성
