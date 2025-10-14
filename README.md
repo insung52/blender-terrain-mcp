@@ -89,6 +89,7 @@ Terrain preview 이미지 위에 마우스로 직접 도로를 그리면, Ramer-
 - **Redis** 6.0+
 - **Blender** 4.5+
 - **Claude API Key** (Anthropic)
+- **Docker Desktop**
 
 ### 1. 설치
 
@@ -117,6 +118,8 @@ BLENDER_PATH="C:\\Program Files\\Blender Foundation\\Blender 4.5\\blender.exe"
 EOF
 ```
 
+이후 Claude API Key 를 **'your-api-key-here'** 에 입력
+
 ### 3. 데이터베이스 설정
 
 ```bash
@@ -127,7 +130,7 @@ mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS blender_terrain;"
 npx prisma migrate dev
 ```
 
-### 4. Redis 실행
+### 4. Redis 실행 (Docker 사용 추천!)
 
 ```bash
 # Docker 사용
@@ -148,6 +151,7 @@ npm run dev
 cd client && npm run dev
 # → http://localhost:5173
 ```
+이후 http://localhost:5173 으로 접속하여 작업 페이지 접속 가능
 
 ---
 
