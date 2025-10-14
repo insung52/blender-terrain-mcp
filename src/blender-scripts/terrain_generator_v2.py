@@ -31,6 +31,7 @@ height_multiplier = params.get('height_multiplier', 30)
 noise_type = params.get('noise_type', 'MUSGRAVE')  # PERLIN, VORONOI, MUSGRAVE
 noise_layers = params.get('noise_layers', 3)
 octaves = params.get('octaves', 6)
+noise_seed = params.get('noise_seed', 0)  # random seed for noise variation
 
 # 지형 특성
 peak_sharpness = params.get('peak_sharpness', 0.5)
@@ -38,10 +39,15 @@ valley_depth = params.get('valley_depth', 0.5)
 erosion = params.get('erosion', 0.3)
 terrace_levels = params.get('terrace_levels', 0)
 
-# 머티리얼
-snow_height = params.get('snow_height', 0.7)
-rock_height = params.get('rock_height', 0.3)
-grass_height = params.get('grass_height', 0.0)
+# 머티리얼 (v3.0: absolute heights preferred)
+snow_height = params.get('snow_height', 0.7)  # deprecated
+rock_height = params.get('rock_height', 0.3)  # deprecated
+grass_height = params.get('grass_height', 0.0)  # deprecated
+
+# v3.0: Absolute height thresholds (meters)
+snow_absolute_height = params.get('snow_absolute_height', 9999)
+rock_absolute_height = params.get('rock_absolute_height', 9999)
+grass_absolute_height = params.get('grass_absolute_height', 9999)
 
 # 색상 (RGB)
 snow_color = params.get('snow_color', [0.95, 0.95, 1.0])
@@ -209,7 +215,33 @@ subsurf.render_levels = 3
 noise_tex = bpy.data.textures.new("ComplexNoise", type='CLOUDS')
 noise_tex.noise_scale = base_scale
 noise_tex.noise_depth = octaves
+
 displace_mod.texture = noise_tex
+
+# v3.0: Apply random seed by offsetting texture coordinates
+# Blender's CLOUDS texture doesn't have a seed parameter, but we can offset the entire coordinate system
+# Create an Empty object to control texture coordinates
+import random
+random.seed(noise_seed)
+
+# Random offset based on seed (range: -1000 to 1000)
+offset_x = (random.random() - 0.5) * 2000
+offset_y = (random.random() - 0.5) * 2000
+offset_z = (random.random() - 0.5) * 2000
+
+bpy.ops.object.empty_add(type='PLAIN_AXES', location=(offset_x, offset_y, offset_z))
+texture_coords_obj = bpy.context.active_object
+texture_coords_obj.name = "TextureCoords"
+
+# Set displacement modifier to use the Empty as texture coordinates
+displace_mod.texture_coords = 'OBJECT'
+displace_mod.texture_coords_object = texture_coords_obj
+
+print(f"[Terrain v2] Applied noise seed: {noise_seed} with offset ({offset_x:.1f}, {offset_y:.1f}, {offset_z:.1f})")
+
+# Re-select terrain object before applying modifiers
+bpy.context.view_layer.objects.active = terrain
+terrain.select_set(True)
 
 # 모디파이어 적용
 bpy.ops.object.modifier_apply(modifier="Subdivision")
@@ -248,29 +280,48 @@ separate_xyz = mat_nodes.new('ShaderNodeSeparateXYZ')
 separate_xyz.location = (200, 0)
 mat_links.new(geometry.outputs['Position'], separate_xyz.inputs['Vector'])
 
-# Map Range (Z를 0-1로 정규화)
+# v3.0: Use absolute heights for material zones
+# Z축 최대 높이 계산 (scaled terrain의 실제 최대 높이)
+max_terrain_height = height_multiplier * z_scale  # e.g., 30m * 3 = 90m
+
+print(f"[Terrain v2] Material absolute heights - Grass: <{grass_absolute_height}m, Rock: >{rock_absolute_height}m, Snow: >{snow_absolute_height}m")
+print(f"[Terrain v2] Terrain max height: {max_terrain_height}m")
+
+# Map Range (Z를 0-1로 정규화, 절대 높이 기준)
 map_range = mat_nodes.new('ShaderNodeMapRange')
 map_range.location = (400, 0)
 map_range.inputs['From Min'].default_value = 0
-map_range.inputs['From Max'].default_value = height_multiplier
+map_range.inputs['From Max'].default_value = max_terrain_height
 map_range.inputs['To Min'].default_value = 0
 map_range.inputs['To Max'].default_value = 1
 mat_links.new(separate_xyz.outputs['Z'], map_range.inputs['Value'])
 
-# Color Ramp (높이 기반 색상)
+# Color Ramp (절대 높이 기반 색상)
 color_ramp = mat_nodes.new('ShaderNodeValToRGB')
 color_ramp.location = (400, 200)
 mat_links.new(map_range.outputs['Result'], color_ramp.inputs['Fac'])
 
+# Convert absolute heights to normalized 0-1 positions for Color Ramp
+grass_pos = min(1.0, grass_absolute_height / max_terrain_height) if grass_absolute_height < 9999 else 0.0
+rock_pos = min(1.0, rock_absolute_height / max_terrain_height) if rock_absolute_height < 9999 else 0.3
+snow_pos = min(1.0, snow_absolute_height / max_terrain_height) if snow_absolute_height < 9999 else 0.9
+
+# Ensure proper ordering (grass < rock < snow)
+grass_pos = max(0.0, min(grass_pos, 0.99))
+rock_pos = max(grass_pos + 0.01, min(rock_pos, 0.99))
+snow_pos = max(rock_pos + 0.01, min(snow_pos, 1.0))
+
+print(f"[Terrain v2] Color Ramp positions - Grass: {grass_pos:.3f}, Rock: {rock_pos:.3f}, Snow: {snow_pos:.3f}")
+
 # Color Ramp 설정
-color_ramp.color_ramp.elements[0].position = grass_height
+color_ramp.color_ramp.elements[0].position = grass_pos
 color_ramp.color_ramp.elements[0].color = (*grass_color, 1.0)
 
-color_ramp.color_ramp.elements[1].position = rock_height
+color_ramp.color_ramp.elements[1].position = rock_pos
 color_ramp.color_ramp.elements[1].color = (*rock_color, 1.0)
 
 # Snow stop 추가
-color_ramp.color_ramp.elements.new(snow_height)
+color_ramp.color_ramp.elements.new(snow_pos)
 color_ramp.color_ramp.elements[2].color = (*snow_color, 1.0)
 
 # BSDF 연결
@@ -283,7 +334,9 @@ mat_links.new(bsdf.outputs['BSDF'], mat_output.inputs['Surface'])
 # Material 적용
 terrain.data.materials.append(mat)
 
-# Smooth Shading
+# Smooth Shading - ensure terrain is active and selected
+bpy.context.view_layer.objects.active = terrain
+terrain.select_set(True)
 bpy.ops.object.shade_smooth()
 
 # ===== 11. 카메라 설정 =====

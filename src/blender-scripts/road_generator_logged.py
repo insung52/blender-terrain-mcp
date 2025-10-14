@@ -102,7 +102,7 @@ bpy.context.collection.objects.link(curve_obj)
 # 3. Manual resampling for uniform spacing
 log(f"[Road] Starting resampling process...")
 
-sample_distance = 2.0
+sample_distance = 1.0
 num_samples = max(32, int(total_length / sample_distance))
 log(f"[Road] Target samples: {num_samples} (every {sample_distance}m)")
 
@@ -240,8 +240,7 @@ modifier.wrap_method = "PROJECT"
 modifier.use_project_z = True
 modifier.use_negative_direction = True
 modifier.use_positive_direction = False
-modifier.offset = 0.05
-
+modifier.offset = 0.1
 # 6. Convert to mesh
 log(f"[Road] Converting curve to mesh...")
 bpy.context.view_layer.objects.active = curve_obj
