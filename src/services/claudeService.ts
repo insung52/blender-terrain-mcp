@@ -72,7 +72,7 @@ Respond with ONLY a JSON object containing ALL these parameters (no other text, 
 
   "snow_color": <[R, G, B] each 0-1. Pure white=[0.95, 0.95, 1.0], Dirty=[0.8, 0.8, 0.85]>,
   "rock_color": <[R, G, B]. Dark gray=[0.3, 0.3, 0.35], Brown=[0.4, 0.35, 0.3], Red=[0.5, 0.3, 0.25]>,
-  "grass_color": <[R, G, B]. Lush green=[0.2, 0.5, 0.15], Dry=[0.4, 0.4, 0.2], Desert=[0.6, 0.5, 0.3]>,
+  "grass_color": <[R, G, B]. Lush green=[0.2, 0.5, 0.15], Dry=[0.4, 0.4, 0.2], Desert=[0.6, 0.5, 0.3], Red=[0.8, 0.1, 0.1], Blue=[0.1, 0.3, 0.8], Yellow=[0.8, 0.8, 0.1]>,
 
   "climate": <"arctic" | "temperate" | "desert" | "volcanic" | "alien">,
   "wetness": <number 0-1, surface reflectivity. Wet/rainy=0.7, Normal=0.3, Dry=0.1>,
@@ -124,6 +124,7 @@ KEY TRANSLATIONS:
 - "계곡/협곡" = valley/canyon → valley_depth=0.7-0.9
 - "사막" = desert → climate="desert", grass_height=1.0
 - "화산" = volcanic → climate="volcanic", rock_color=[0.15, 0.1, 0.1]
+- COLOR INSTRUCTIONS: If user specifies unusual colors (e.g., "빨간색 잔디", "파란 바위"), ALWAYS apply that exact color to the respective material (grass_color, rock_color, snow_color). Convert Korean color names to RGB: 빨간색=red=[0.8,0.1,0.1], 파란색=blue=[0.1,0.3,0.8], 노란색=yellow=[0.8,0.8,0.1], 보라색=purple=[0.6,0.1,0.6], 분홍색=pink=[0.9,0.4,0.6], 주황색=orange=[0.9,0.5,0.1]
 
 Now analyze: "${description}"`
       }]
