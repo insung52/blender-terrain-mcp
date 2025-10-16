@@ -17,7 +17,7 @@ AI 기반 자동 지형 생성 및 도로 배치 시스템
 
 웹 기반 서비스
 
-localhost:5173 접속 또는 실제 웹 서비스 배포 가능
+localhost:3000 접속 또는 실제 웹 서비스 배포 가능
 
 ![Main Demo](assets/md/r6.png)
 
@@ -101,8 +101,8 @@ cd blender-terrain-mcp
 # 패키지 설치
 npm install
 
-# 클라이언트 패키지 설치
-cd client && npm install && cd ..
+# 클라이언트 패키지 설치 및 빌드
+cd client && npm install && npx vite build && cd ..
 ```
 
 ### 2. 환경 설정
@@ -157,15 +157,49 @@ redis-server
 ### 5. 실행
 
 ```bash
-# 터미널 1: Backend
+# 서버 실행 (Backend + Frontend 통합)
 npm run dev
 # → http://localhost:3000
+```
 
-# 터미널 2: Frontend
+**프로덕션 모드**: Frontend가 빌드되어 포트 3000에서 함께 제공됩니다.
+
+**개발 모드** (Frontend 수정 시):
+```bash
+# 터미널 1: Backend
+npm run dev
+
+# 터미널 2: Frontend (Hot Reload)
 cd client && npm run dev
 # → http://localhost:5173
 ```
-이후 http://localhost:5173 으로 접속하여 작업 페이지 접속 가능
+
+---
+
+## 🌐 외부 배포 (연구실/서버)
+
+프로덕션 환경에서 외부 접속을 허용하려면:
+
+### 1. 포트포워딩 설정
+- **포트:** 3000
+- **프로토콜:** TCP
+- **규칙 종류:** HTTP (또는 사용자 정의)
+
+### 2. 서버 실행
+```bash
+npm run dev
+```
+
+### 3. 외부 접속
+```
+http://서버IP:3000
+http://공인IP:3000
+```
+
+**주의사항:**
+- MySQL, Redis는 로컬호스트에서만 접근 (외부 노출 불필요)
+- 방화벽에서 포트 3000 허용 필요
+- HTTPS가 필요한 경우 nginx 리버스 프록시 사용 권장
 
 ---
 
