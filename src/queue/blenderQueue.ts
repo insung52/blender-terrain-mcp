@@ -46,7 +46,12 @@ blenderQueue.process(2, async (job) => {
       const command = `"${config.blenderPath}" --background --python "${scriptPath}" -- "${paramsFilePath}" "${outputPath}" "${previewPath}"`;
 
       console.log(`[Worker] Executing Blender...`);
-      const result = await execAsync(command, { maxBuffer: 10 * 1024 * 1024 }); // 10MB buffer
+      const result = await execAsync(command, {
+        maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+        encoding: 'utf8',
+        windowsHide: true,
+        env: { ...process.env }
+      });
 
       // 임시 파일 삭제
       try { fs.unlinkSync(paramsFilePath); } catch (e) {}
@@ -103,7 +108,12 @@ blenderQueue.process(2, async (job) => {
       const command = `"${config.blenderPath}" --background --python "${scriptPath}" -- "${paramsFilePath}" "${terrainBlendPath}" "${outputPath}" "${previewPath}"`;
 
       console.log(`[Worker] Executing Blender for road...`);
-      const result = await execAsync(command, { maxBuffer: 10 * 1024 * 1024 });
+      const result = await execAsync(command, {
+        maxBuffer: 10 * 1024 * 1024,
+        encoding: 'utf8',
+        windowsHide: true,
+        env: { ...process.env }
+      });
 
       // 임시 파일 삭제
       try { fs.unlinkSync(paramsFilePath); } catch (e) {}
