@@ -27,8 +27,8 @@ app.use(cors());
 app.use(express.json());
 app.use('/output', express.static(path.join(__dirname, '../output')));
 
-// Health check
-app.get('/', (req, res) => {
+// Health check API (moved before wildcard route)
+app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     message: 'Blender Terrain MCP Server',
@@ -478,6 +478,14 @@ app.post('/api/road', async (req, res) => {
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
+});
+
+// Serve static files from React app (프로덕션 모드)
+app.use(express.static(path.join(__dirname, '../client/dist')));
+
+// All remaining requests return the React app (프론트엔드 라우팅 지원)
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../client/dist/index.html'));
 });
 
 // Start server

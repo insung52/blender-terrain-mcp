@@ -52,7 +52,7 @@ function App() {
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const API_URL = 'http://localhost:3000';
+  const API_URL = '';
 
   // Load terrains on component mount
   useEffect(() => {
