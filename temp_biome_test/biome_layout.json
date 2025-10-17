@@ -1,0 +1,51 @@
+{
+  "biome_points": [
+    {
+      "position": [
+        25,
+        50
+      ],
+      "biome_params": {
+        "temperature": -0.7,
+        "humidity": 0.4,
+        "erosion": 0.8,
+        "continentalness": 0.6,
+        "weirdness": 0.3,
+        "vegetation_color_r": 0.2,
+        "vegetation_color_g": 0.3,
+        "vegetation_color_b": 0.2,
+        "ground_color_r": 0.4,
+        "ground_color_g": 0.4,
+        "ground_color_b": 0.45,
+        "snow_start_height": 1500,
+        "rock_exposure": 0.7
+      },
+      "coverage": 0.3,
+      "description": "snowy_mountain"
+    },
+    {
+      "position": [
+        75,
+        50
+      ],
+      "biome_params": {
+        "temperature": 0.9,
+        "humidity": 0.1,
+        "erosion": 0.3,
+        "continentalness": 0.5,
+        "weirdness": 0.1,
+        "vegetation_color_r": 0.4,
+        "vegetation_color_g": 0.4,
+        "vegetation_color_b": 0.2,
+        "ground_color_r": 0.9,
+        "ground_color_g": 0.8,
+        "ground_color_b": 0.6,
+        "snow_start_height": 9999,
+        "rock_exposure": 0.3
+      },
+      "coverage": 0.3,
+      "description": "desert"
+    }
+  ],
+  "blend_distance": 15
+}

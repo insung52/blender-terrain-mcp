@@ -372,7 +372,7 @@ def blend_parameters(influences):
 - [ ] Material 시스템 개선
 
 ### Phase 4: UI/UX 개선 (1주)
-- [ ] 프론트엔드 바이옴 프리셋 선택 UI
+- ~~[ ] 프론트엔드 바이옴 프리셋 선택 UI~~
 - [ ] 실시간 바이옴 맵 미리보기
 
 ---

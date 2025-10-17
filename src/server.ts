@@ -4,6 +4,7 @@ import { executeBlenderScript } from './services/blenderService';
 import { prisma } from './db/client';
 import { blenderQueue } from './queue/blenderQueue';
 import { analyzeTerrainDescription } from './services/claudeService';
+import { generateBiomeLayout } from './services/biomeService';
 import path from 'path';
 import fs from 'fs';
 
@@ -372,33 +373,38 @@ app.delete('/api/road/:roadId', async (req, res) => {
 // Terrain 생성 API
 app.post('/api/terrain', async (req, res) => {
   try {
-    const { description, scale, roughness, size, terrain_scale, useAI } = req.body;
+    const { description, scale, roughness, size, terrain_scale, useAI, useBiome } = req.body;
 
-    let finalParams = {
+    let finalParams: any = {
       scale: scale || 15,
       roughness: roughness || 0.7,
-      terrain_scale: terrain_scale || 10,  // 지형 스케일 배율 (기본 10배)
-      description: description || ''
+      terrain_scale: terrain_scale || 10,
+      description: description || '',
+      useBiome: useBiome || false
     };
 
-    // Claude AI 분석 사용 (useAI가 true이고 description이 있을 때)
+    // **바이옴 모드**: useAI가 true이고 description이 있으면 바이옴 지형 생성
     if (useAI && description && process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== 'your-api-key-here') {
-      console.log(`[API] Analyzing terrain with Claude: "${description}"`);
+      console.log(`[API] 🌍 BIOME MODE: Generating biome layout from: "${description}"`);
       console.log(`[API] Using API key: ${process.env.ANTHROPIC_API_KEY.substring(0, 20)}... (${process.env.ANTHROPIC_API_KEY.length} chars)`);
+
       try {
-        const aiParams = await analyzeTerrainDescription(description);
-        // v2.0: Claude의 모든 파라미터를 finalParams에 병합
+        const biomeLayout = await generateBiomeLayout(description);
+        console.log(`[API] ✅ Biome layout generated: ${biomeLayout.biome_points.length} biome points`);
+
         finalParams = {
           ...finalParams,
-          ...aiParams  // 모든 v2 파라미터 포함
+          useBiome: true,
+          biomeLayout: biomeLayout
         };
-        console.log(`[API] Claude analysis SUCCESS:`, JSON.stringify(aiParams, null, 2));
       } catch (error: any) {
-        console.error(`[API] Claude analysis FAILED:`, error.message);
+        console.error(`[API] ❌ Biome generation FAILED:`, error.message);
         console.error(`[API] Full error:`, error);
+        // Fallback: 기존 방식으로 진행
+        finalParams.useBiome = false;
       }
     } else {
-      console.log(`[API] Claude AI skipped - useAI: ${useAI}, description: ${!!description}, API key: ${!!process.env.ANTHROPIC_API_KEY}`);
+      console.log(`[API] Standard terrain mode - useAI: ${useAI}, description: ${!!description}, API key: ${!!process.env.ANTHROPIC_API_KEY}`);
     }
 
     // DB: Job 생성
@@ -424,7 +430,7 @@ app.post('/api/terrain', async (req, res) => {
       success: true,
       jobId: dbJob.id,
       status: 'queued',
-      message: 'Terrain generation started'
+      message: finalParams.useBiome ? 'Biome terrain generation started' : 'Terrain generation started'
     });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });

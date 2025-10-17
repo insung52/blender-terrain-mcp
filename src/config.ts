@@ -8,4 +8,5 @@ export const config = {
   // Output directories
   outputDir: './output',
   scriptsDir: './src/blender-scripts',
+  blenderScriptsDir: './src/blender-scripts',
 };
