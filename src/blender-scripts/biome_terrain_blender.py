@@ -87,10 +87,10 @@ log("    - Continentalness: -1~1 → -50m~1500m (actual elevation)")
 log("    - Erosion: 0~1 → 0~400m (height variation range)")
 log("    - Temperature: removed from height (material only)")
 log("  Phase 2: Multi-Octave Noise")
-log("    - Octave 1 (50%): scale=0.01 (100m features)")
-log("    - Octave 2 (30%): scale=0.05 (20m features)")
-log("    - Octave 3 (15%): scale=0.2 (5m features)")
-log("    - Octave 4 (5%): scale=1.0 (1m details)")
+log("    - Octave 1 (60%): scale=0.01 (100m smooth mountains)")
+log("    - Octave 2 (25%): scale=0.05 (20m medium details)")
+log("    - Octave 3 (12%): scale=0.2 (5m small details)")
+log("    - Octave 4 (3%): scale=1.0 (1m micro details, spike prevention)")
 log("  Phase 3: Weirdness Special Terrain")
 log("    - Voronoi-based ridges & cliffs")
 log("    - Ridge height: 200m * erosion * weirdness")
@@ -110,9 +110,9 @@ log("    - Hot regions: snow only above 4000m")
 log("    - Smooth transition zone ±50m")
 log("  Phase 7: UV Distortion (Minecraft-style Irregular Boundaries)")
 log("    - Multi-scale noise distortion on UV coordinates")
-log("    - Large distortion: ±15% (±150m for 1000m terrain)")
-log("    - Medium distortion: ±8% (±80m)")
-log("    - Result: Jagged, irregular biome edges (no more circles!)")
+log("    - Large distortion: ±5% (±50m for 1000m terrain)")
+log("    - Medium distortion: ±3% (±30m)")
+log("    - Result: Smooth irregular biome edges, spike prevention")
 log("")
 
 # 메인 실행 (에러 캡처)
@@ -285,45 +285,51 @@ try:
     # Separate noise into X/Y offsets (Large)
     separate_noise_large = nodes.new("ShaderNodeSeparateXYZ")
     separate_noise_large.location = (250, -200)
-    links.new(noise_distort_large.outputs["Color"], separate_noise_large.inputs["Vector"])
+    links.new(
+        noise_distort_large.outputs["Color"], separate_noise_large.inputs["Vector"]
+    )
 
     # Separate noise into X/Y offsets (Medium)
     separate_noise_medium = nodes.new("ShaderNodeSeparateXYZ")
     separate_noise_medium.location = (250, -400)
-    links.new(noise_distort_medium.outputs["Color"], separate_noise_medium.inputs["Vector"])
+    links.new(
+        noise_distort_medium.outputs["Color"], separate_noise_medium.inputs["Vector"]
+    )
 
-    # Remap noise: 0~1 → -0.15~0.15 (Large: ±15% UV distortion = ±150m for 1000m terrain)
+    # Remap noise: 0~1 → -0.05~0.05 (Large: ±5% UV distortion = ±50m for 1000m terrain)
+    # 🔧 Reduced from ±15% to ±5% to prevent terrain spikes
     remap_noise_x_large = nodes.new("ShaderNodeMapRange")
     remap_noise_x_large.location = (450, -150)
     remap_noise_x_large.inputs["From Min"].default_value = 0.0
     remap_noise_x_large.inputs["From Max"].default_value = 1.0
-    remap_noise_x_large.inputs["To Min"].default_value = -0.15
-    remap_noise_x_large.inputs["To Max"].default_value = 0.15
+    remap_noise_x_large.inputs["To Min"].default_value = -0.05
+    remap_noise_x_large.inputs["To Max"].default_value = 0.05
     links.new(separate_noise_large.outputs["X"], remap_noise_x_large.inputs["Value"])
 
     remap_noise_y_large = nodes.new("ShaderNodeMapRange")
     remap_noise_y_large.location = (450, -300)
     remap_noise_y_large.inputs["From Min"].default_value = 0.0
     remap_noise_y_large.inputs["From Max"].default_value = 1.0
-    remap_noise_y_large.inputs["To Min"].default_value = -0.15
-    remap_noise_y_large.inputs["To Max"].default_value = 0.15
+    remap_noise_y_large.inputs["To Min"].default_value = -0.05
+    remap_noise_y_large.inputs["To Max"].default_value = 0.05
     links.new(separate_noise_large.outputs["Y"], remap_noise_y_large.inputs["Value"])
 
-    # Remap noise: 0~1 → -0.08~0.08 (Medium: ±8% UV distortion = ±80m)
+    # Remap noise: 0~1 → -0.03~0.03 (Medium: ±3% UV distortion = ±30m)
+    # 🔧 Reduced from ±8% to ±3% to prevent terrain spikes
     remap_noise_x_medium = nodes.new("ShaderNodeMapRange")
     remap_noise_x_medium.location = (450, -450)
     remap_noise_x_medium.inputs["From Min"].default_value = 0.0
     remap_noise_x_medium.inputs["From Max"].default_value = 1.0
-    remap_noise_x_medium.inputs["To Min"].default_value = -0.08
-    remap_noise_x_medium.inputs["To Max"].default_value = 0.08
+    remap_noise_x_medium.inputs["To Min"].default_value = -0.03
+    remap_noise_x_medium.inputs["To Max"].default_value = 0.03
     links.new(separate_noise_medium.outputs["X"], remap_noise_x_medium.inputs["Value"])
 
     remap_noise_y_medium = nodes.new("ShaderNodeMapRange")
     remap_noise_y_medium.location = (450, -600)
     remap_noise_y_medium.inputs["From Min"].default_value = 0.0
     remap_noise_y_medium.inputs["From Max"].default_value = 1.0
-    remap_noise_y_medium.inputs["To Min"].default_value = -0.08
-    remap_noise_y_medium.inputs["To Max"].default_value = 0.08
+    remap_noise_y_medium.inputs["To Min"].default_value = -0.03
+    remap_noise_y_medium.inputs["To Max"].default_value = 0.03
     links.new(separate_noise_medium.outputs["Y"], remap_noise_y_medium.inputs["Value"])
 
     # Combine large + medium distortion (X)
@@ -373,7 +379,13 @@ try:
     current_y = 500
 
     # 지형 높이에 사용할 파라미터 로드 (Phase 5: humidity 추가)
-    height_params = ["temperature", "erosion", "continentalness", "weirdness", "humidity"]
+    height_params = [
+        "temperature",
+        "erosion",
+        "continentalness",
+        "weirdness",
+        "humidity",
+    ]
 
     stored_attributes = {}
 
@@ -495,31 +507,31 @@ try:
     noise_octave_4.inputs["Roughness"].default_value = 0.8
     links.new(position_node.outputs["Position"], noise_octave_4.inputs["Vector"])
 
-    # Octave 1 * 0.50
+    # Octave 1 * 0.60 (부드러운 큰 산맥 강화)
     multiply_octave_1 = nodes.new("ShaderNodeMath")
     multiply_octave_1.operation = "MULTIPLY"
-    multiply_octave_1.inputs[1].default_value = 0.50
+    multiply_octave_1.inputs[1].default_value = 0.60
     multiply_octave_1.location = (1150, -200)
     links.new(noise_octave_1.outputs["Fac"], multiply_octave_1.inputs[0])
 
-    # Octave 2 * 0.30
+    # Octave 2 * 0.25 (중간 디테일)
     multiply_octave_2 = nodes.new("ShaderNodeMath")
     multiply_octave_2.operation = "MULTIPLY"
-    multiply_octave_2.inputs[1].default_value = 0.30
+    multiply_octave_2.inputs[1].default_value = 0.25
     multiply_octave_2.location = (1150, -350)
     links.new(noise_octave_2.outputs["Fac"], multiply_octave_2.inputs[0])
 
-    # Octave 3 * 0.15
+    # Octave 3 * 0.12 (작은 디테일 약화)
     multiply_octave_3 = nodes.new("ShaderNodeMath")
     multiply_octave_3.operation = "MULTIPLY"
-    multiply_octave_3.inputs[1].default_value = 0.15
+    multiply_octave_3.inputs[1].default_value = 0.12
     multiply_octave_3.location = (1150, -500)
     links.new(noise_octave_3.outputs["Fac"], multiply_octave_3.inputs[0])
 
-    # Octave 4 * 0.05
+    # Octave 4 * 0.03 (미세 디테일 최소화, 가시 방지)
     multiply_octave_4 = nodes.new("ShaderNodeMath")
     multiply_octave_4.operation = "MULTIPLY"
-    multiply_octave_4.inputs[1].default_value = 0.05
+    multiply_octave_4.inputs[1].default_value = 0.01
     multiply_octave_4.location = (1150, -650)
     links.new(noise_octave_4.outputs["Fac"], multiply_octave_4.inputs[0])
 
@@ -563,7 +575,9 @@ try:
     map_continentalness.inputs["From Max"].default_value = 1.0
     map_continentalness.inputs["To Min"].default_value = -50.0
     map_continentalness.inputs["To Max"].default_value = 1500.0
-    links.new(attr_continentalness.outputs["Attribute"], map_continentalness.inputs["Value"])
+    links.new(
+        attr_continentalness.outputs["Attribute"], map_continentalness.inputs["Value"]
+    )
 
     # STEP 2: Erosion을 높이 변동 범위로 변환
     # 0~1 → 0~400m (스케일 조정: 800m→400m)
@@ -590,8 +604,8 @@ try:
     # Voronoi Texture for cliffs/canyons
     voronoi_node = nodes.new("ShaderNodeTexVoronoi")
     voronoi_node.location = (1200, -300)
-    voronoi_node.voronoi_dimensions = '3D'
-    voronoi_node.feature = 'F1'  # F1 = Distance to closest feature point
+    voronoi_node.voronoi_dimensions = "3D"
+    voronoi_node.feature = "F1"  # F1 = Distance to closest feature point
     voronoi_node.inputs["Scale"].default_value = 0.1  # 절벽 스케일
     links.new(position_node.outputs["Position"], voronoi_node.inputs["Vector"])
 
@@ -653,7 +667,9 @@ try:
     multiply_ridge_weirdness = nodes.new("ShaderNodeMath")
     multiply_ridge_weirdness.operation = "MULTIPLY"
     multiply_ridge_weirdness.location = (2600, -300)
-    links.new(multiply_ridge_erosion.outputs["Value"], multiply_ridge_weirdness.inputs[0])
+    links.new(
+        multiply_ridge_erosion.outputs["Value"], multiply_ridge_weirdness.inputs[0]
+    )
     links.new(attr_weirdness.outputs["Attribute"], multiply_ridge_weirdness.inputs[1])
 
     # 기존 Weirdness 노이즈 효과 (약하게 유지)
@@ -673,7 +689,9 @@ try:
     add_weirdness_effects = nodes.new("ShaderNodeMath")
     add_weirdness_effects.operation = "ADD"
     add_weirdness_effects.location = (2750, -400)
-    links.new(multiply_ridge_weirdness.outputs["Value"], add_weirdness_effects.inputs[0])
+    links.new(
+        multiply_ridge_weirdness.outputs["Value"], add_weirdness_effects.inputs[0]
+    )
     links.new(multiply_weird_strength.outputs["Value"], add_weirdness_effects.inputs[1])
 
     # =========================================================================
@@ -713,7 +731,9 @@ try:
     multiply_valley_depth.operation = "MULTIPLY"
     multiply_valley_depth.location = (2600, -750)
     links.new(divide_by_two.outputs["Value"], multiply_valley_depth.inputs[0])
-    links.new(multiply_humidity_strength.outputs["Value"], multiply_valley_depth.inputs[1])
+    links.new(
+        multiply_humidity_strength.outputs["Value"], multiply_valley_depth.inputs[1]
+    )
 
     # STEP 5: 최종 높이 합성
     # final_height = base_height + height_variation + ridge_effects - valley_depth
@@ -804,7 +824,12 @@ try:
     # Snow Material (Principled BSDF)
     snow_bsdf = mat_nodes.new("ShaderNodeBsdfPrincipled")
     snow_bsdf.location = (400, -100)
-    snow_bsdf.inputs["Base Color"].default_value = (0.95, 0.95, 1.0, 1.0)  # 눈 (약간 파란빛)
+    snow_bsdf.inputs["Base Color"].default_value = (
+        0.95,
+        0.95,
+        1.0,
+        1.0,
+    )  # 눈 (약간 파란빛)
     snow_bsdf.inputs["Roughness"].default_value = 0.8
     mat_links.new(snow_bsdf.outputs["BSDF"], mix_shader.inputs[2])
 
@@ -826,7 +851,7 @@ try:
     temp_attr = mat_nodes.new("ShaderNodeAttribute")
     temp_attr.location = (-600, -200)
     temp_attr.attribute_name = "temperature"
-    temp_attr.attribute_type = 'GEOMETRY'
+    temp_attr.attribute_type = "GEOMETRY"
 
     # Snowline height calculation: Map Range
     # Temperature: -1~1 → Snowline: 500m~4000m
@@ -836,7 +861,7 @@ try:
     snowline_map.location = (-200, -200)
     snowline_map.inputs["From Min"].default_value = -1.0
     snowline_map.inputs["From Max"].default_value = 1.0
-    snowline_map.inputs["To Min"].default_value = 500.0   # 추운 곳: 500m부터 눈
+    snowline_map.inputs["To Min"].default_value = 500.0  # 추운 곳: 500m부터 눈
     snowline_map.inputs["To Max"].default_value = 4000.0  # 더운 곳: 4000m부터만 눈
     mat_links.new(temp_attr.outputs["Fac"], snowline_map.inputs["Value"])
 
@@ -940,13 +965,15 @@ try:
     terrain_obj.select_set(True)
 
     # Subdivision Surface Modifier 추가
-    subsurf_modifier = terrain_obj.modifiers.new(name="Subdivision", type='SUBSURF')
-    subsurf_modifier.levels = 3              # Level 3 적용 (64배 증가 → 2.5M vertices)
-    subsurf_modifier.render_levels = 3       # 동일
-    subsurf_modifier.subdivision_type = 'CATMULL_CLARK'
+    subsurf_modifier = terrain_obj.modifiers.new(name="Subdivision", type="SUBSURF")
+    subsurf_modifier.levels = 3  # Level 3 적용 (64배 증가 → 2.5M vertices)
+    subsurf_modifier.render_levels = 3  # 동일
+    subsurf_modifier.subdivision_type = "CATMULL_CLARK"
 
     log(f"Before Subdivision - Vertex count: {len(terrain_obj.data.vertices):,}")
-    log(f"Subdivision level: 3 (target: ≈{len(terrain_obj.data.vertices) * 64:,} vertices)")
+    log(
+        f"Subdivision level: 3 (target: ≈{len(terrain_obj.data.vertices) * 64:,} vertices)"
+    )
 
     # Modifier 즉시 적용 (실제 메시로 변환)
     try:
