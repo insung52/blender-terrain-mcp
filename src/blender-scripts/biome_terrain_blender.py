@@ -65,13 +65,15 @@ base_size = 100
 grid_subdivisions = params.get("grid_subdivisions", 200)  # 200×200 base
 terrain_scale = params.get("terrain_scale", 10)  # 10배 = 1km
 height_multiplier = params.get("height_multiplier", 30)
-z_scale = params.get("z_scale", 3)
+z_scale = params.get("z_scale", 1.5)  # 🔧 3 → 1.5 (50% 감소)
 
 noise_scale = params.get("noise_scale", 0.05)
 noise_detail = params.get("noise_detail", 5.0)
 
 erosion_strength = params.get("erosion_strength", 20.0)
-continentalness_strength = params.get("continentalness_strength", 10.0)
+continentalness_strength = params.get(
+    "continentalness_strength", 5.0
+)  # 🔧 10.0 → 5.0 (바이옴 간 높이 차이 감소)
 weirdness_strength = params.get("weirdness_strength", 5.0)
 temperature_influence = params.get("temperature_influence", 0.2)
 
@@ -109,7 +111,7 @@ log("    - Cold regions: snow from 500m altitude")
 log("    - Hot regions: snow only above 4000m")
 log("    - Smooth transition zone ±50m")
 log("")
-log("⚠️  UV Distortion removed - already applied in biome map generation")
+log("✅ UV Distortion: ±60m total (large ±30m/100m, medium ±20m/40m, small ±10m/10m)")
 log("")
 
 # 메인 실행 (에러 캡처)
@@ -252,18 +254,138 @@ try:
     divide_y_node.location = (-200, 0)
     links.new(add_y_node.outputs["Value"], divide_y_node.inputs[0])
 
-    # Combine XY for UV
+    # Combine XY for UV (원본)
     combine_xy = nodes.new("ShaderNodeCombineXYZ")
     combine_xy.location = (0, 100)
     links.new(divide_x_node.outputs["Value"], combine_xy.inputs["X"])
     links.new(divide_y_node.outputs["Value"], combine_xy.inputs["Y"])
 
-    # UV Distortion 제거!
-    # 바이옴 맵 생성 단계에서 이미 Multi-octave Noise로 울퉁불퉁한 경계 생성됨
-    # Blender에서 추가 왜곡하면 이중 왜곡 → 송곳 현상 발생
+    # =============================================================================
+    # 6. UV Distortion (3단계 - 계단 현상 제거 + 자연스러운 디테일)
+    # =============================================================================
+
+    # 바이옴 맵: 경계를 울퉁불퉁하게 (Voronoi noise)
+    # UV 왜곡: 지형 샘플링을 자연스럽게 (계단 현상 제거)
+
+    # Large-scale distortion noise (±3% = ±30m, 100m 주기)
+    noise_large = nodes.new("ShaderNodeTexNoise")
+    noise_large.location = (200, 500)
+    noise_large.inputs["Scale"].default_value = 0.01  # 100m 주기
+    noise_large.inputs["Detail"].default_value = 4.0
+
+    # Medium-scale distortion noise (±2% = ±20m, 40m 주기)
+    noise_medium = nodes.new("ShaderNodeTexNoise")
+    noise_medium.location = (200, 300)
+    noise_medium.inputs["Scale"].default_value = 0.025  # 40m 주기
+    noise_medium.inputs["Detail"].default_value = 3.0
+
+    # Small-scale distortion noise (±1% = ±10m, 10m 주기)
+    noise_small = nodes.new("ShaderNodeTexNoise")
+    noise_small.location = (200, 100)
+    noise_small.inputs["Scale"].default_value = 0.1  # 10m 주기
+    noise_small.inputs["Detail"].default_value = 2.0
+
+    # Noise를 X, Y 오프셋으로 분리
+    separate_large = nodes.new("ShaderNodeSeparateXYZ")
+    separate_large.location = (400, 500)
+    links.new(noise_large.outputs["Color"], separate_large.inputs["Vector"])
+
+    separate_medium = nodes.new("ShaderNodeSeparateXYZ")
+    separate_medium.location = (400, 300)
+    links.new(noise_medium.outputs["Color"], separate_medium.inputs["Vector"])
+
+    separate_small = nodes.new("ShaderNodeSeparateXYZ")
+    separate_small.location = (400, 100)
+    links.new(noise_small.outputs["Color"], separate_small.inputs["Vector"])
+
+    # Large X offset (±3%)
+    math_large_x = nodes.new("ShaderNodeMath")
+    math_large_x.operation = "MULTIPLY"
+    math_large_x.location = (600, 550)
+    links.new(separate_large.outputs["X"], math_large_x.inputs[0])
+    math_large_x.inputs[1].default_value = 0.2  # ±3% = ±30m
+
+    # Large Y offset (±3%)
+    math_large_y = nodes.new("ShaderNodeMath")
+    math_large_y.operation = "MULTIPLY"
+    math_large_y.location = (600, 450)
+    links.new(separate_large.outputs["Y"], math_large_y.inputs[0])
+    math_large_y.inputs[1].default_value = 0.2
+
+    # Medium X offset (±2%)
+    math_medium_x = nodes.new("ShaderNodeMath")
+    math_medium_x.operation = "MULTIPLY"
+    math_medium_x.location = (600, 350)
+    links.new(separate_medium.outputs["X"], math_medium_x.inputs[0])
+    math_medium_x.inputs[1].default_value = 0.06  # ±2% = ±20m
+
+    # Medium Y offset (±2%)
+    math_medium_y = nodes.new("ShaderNodeMath")
+    math_medium_y.operation = "MULTIPLY"
+    math_medium_y.location = (600, 250)
+    links.new(separate_medium.outputs["Y"], math_medium_y.inputs[0])
+    math_medium_y.inputs[1].default_value = 0.06
+
+    # Small X offset (±1%)
+    math_small_x = nodes.new("ShaderNodeMath")
+    math_small_x.operation = "MULTIPLY"
+    math_small_x.location = (600, 150)
+    links.new(separate_small.outputs["X"], math_small_x.inputs[0])
+    math_small_x.inputs[1].default_value = 0.03  # ±1% = ±10m
+
+    # Small Y offset (±1%)
+    math_small_y = nodes.new("ShaderNodeMath")
+    math_small_y.operation = "MULTIPLY"
+    math_small_y.location = (600, 50)
+    links.new(separate_small.outputs["Y"], math_small_y.inputs[0])
+    math_small_y.inputs[1].default_value = 0.03
+
+    # 합산: Large + Medium + Small
+    add_x_1 = nodes.new("ShaderNodeMath")
+    add_x_1.operation = "ADD"
+    add_x_1.location = (800, 500)
+    links.new(math_large_x.outputs["Value"], add_x_1.inputs[0])
+    links.new(math_medium_x.outputs["Value"], add_x_1.inputs[1])
+
+    add_x = nodes.new("ShaderNodeMath")
+    add_x.operation = "ADD"
+    add_x.location = (1000, 400)
+    links.new(add_x_1.outputs["Value"], add_x.inputs[0])
+    links.new(math_small_x.outputs["Value"], add_x.inputs[1])
+
+    add_y_1 = nodes.new("ShaderNodeMath")
+    add_y_1.operation = "ADD"
+    add_y_1.location = (800, 250)
+    links.new(math_large_y.outputs["Value"], add_y_1.inputs[0])
+    links.new(math_medium_y.outputs["Value"], add_y_1.inputs[1])
+
+    add_y = nodes.new("ShaderNodeMath")
+    add_y.operation = "ADD"
+    add_y.location = (1000, 200)
+    links.new(add_y_1.outputs["Value"], add_y.inputs[0])
+    links.new(math_small_y.outputs["Value"], add_y.inputs[1])
+
+    # UV에 오프셋 적용
+    distort_x = nodes.new("ShaderNodeMath")
+    distort_x.operation = "ADD"
+    distort_x.location = (1200, 350)
+    links.new(divide_x_node.outputs["Value"], distort_x.inputs[0])
+    links.new(add_x.outputs["Value"], distort_x.inputs[1])
+
+    distort_y = nodes.new("ShaderNodeMath")
+    distort_y.operation = "ADD"
+    distort_y.location = (1200, 150)
+    links.new(divide_y_node.outputs["Value"], distort_y.inputs[0])
+    links.new(add_y.outputs["Value"], distort_y.inputs[1])
+
+    # 왜곡된 UV 조합
+    combine_xy_distorted = nodes.new("ShaderNodeCombineXYZ")
+    combine_xy_distorted.location = (1400, 250)
+    links.new(distort_x.outputs["Value"], combine_xy_distorted.inputs["X"])
+    links.new(distort_y.outputs["Value"], combine_xy_distorted.inputs["Y"])
 
     # =============================================================================
-    # 6. Image Texture 샘플링 및 Attribute 저장
+    # 7. Image Texture 샘플링 및 Attribute 저장
     # =============================================================================
 
     # 각 파라미터에 대해 Image Texture + Map Range + Store Named Attribute
@@ -291,8 +413,8 @@ try:
         img_tex_node.inputs["Image"].default_value = loaded_images[param_name]
         # interpolation은 extension_type으로 변경됨
         img_tex_node.extension = "EXTEND"
-        # 기본 UV 사용 (바이옴 맵에서 이미 Noise 왜곡 적용됨)
-        links.new(combine_xy.outputs["Vector"], img_tex_node.inputs["Vector"])
+        # 🔥 왜곡된 UV 사용 (계단 현상 제거)
+        links.new(combine_xy_distorted.outputs["Vector"], img_tex_node.inputs["Vector"])
 
         # Map Range (0~1 이미지 값을 파라미터 범위로 변환)
         map_range = nodes.new("ShaderNodeMapRange")
@@ -709,8 +831,60 @@ try:
     # Ground Material (Principled BSDF)
     ground_bsdf = mat_nodes.new("ShaderNodeBsdfPrincipled")
     ground_bsdf.location = (400, 100)
-    ground_bsdf.inputs["Base Color"].default_value = (0.3, 0.25, 0.2, 1.0)  # 기본 갈색
     mat_links.new(ground_bsdf.outputs["BSDF"], mix_shader.inputs[1])
+
+    # 🔥 Ground Color from biome maps (RGB 채널 분리되어 있음)
+    # UV 좌표 가져오기 (텍스처 샘플링용)
+    uv_map_node = mat_nodes.new("ShaderNodeUVMap")
+    uv_map_node.location = (-600, 400)
+    uv_map_node.uv_map = "UVMap"  # 기본 UV
+
+    # Ground Color R 채널
+    if "ground_color_r" in loaded_images:
+        img_tex_r = mat_nodes.new("ShaderNodeTexImage")
+        img_tex_r.location = (-200, 500)
+        img_tex_r.image = loaded_images["ground_color_r"]
+        img_tex_r.extension = "EXTEND"
+        mat_links.new(uv_map_node.outputs["UV"], img_tex_r.inputs["Vector"])
+    else:
+        img_tex_r = None
+        log("⚠️ ground_color_r image not found")
+
+    # Ground Color G 채널
+    if "ground_color_g" in loaded_images:
+        img_tex_g = mat_nodes.new("ShaderNodeTexImage")
+        img_tex_g.location = (-200, 300)
+        img_tex_g.image = loaded_images["ground_color_g"]
+        img_tex_g.extension = "EXTEND"
+        mat_links.new(uv_map_node.outputs["UV"], img_tex_g.inputs["Vector"])
+    else:
+        img_tex_g = None
+        log("⚠️ ground_color_g image not found")
+
+    # Ground Color B 채널
+    if "ground_color_b" in loaded_images:
+        img_tex_b = mat_nodes.new("ShaderNodeTexImage")
+        img_tex_b.location = (-200, 100)
+        img_tex_b.image = loaded_images["ground_color_b"]
+        img_tex_b.extension = "EXTEND"
+        mat_links.new(uv_map_node.outputs["UV"], img_tex_b.inputs["Vector"])
+    else:
+        img_tex_b = None
+        log("⚠️ ground_color_b image not found")
+
+    # RGB 채널 합성
+    if img_tex_r and img_tex_g and img_tex_b:
+        combine_rgb = mat_nodes.new("ShaderNodeCombineRGB")
+        combine_rgb.location = (100, 300)
+        mat_links.new(img_tex_r.outputs["Color"], combine_rgb.inputs["R"])
+        mat_links.new(img_tex_g.outputs["Color"], combine_rgb.inputs["G"])
+        mat_links.new(img_tex_b.outputs["Color"], combine_rgb.inputs["B"])
+        mat_links.new(combine_rgb.outputs["Image"], ground_bsdf.inputs["Base Color"])
+        log("✅ Ground color from biome maps (RGB channels)")
+    else:
+        # Fallback: 기본 갈색
+        ground_bsdf.inputs["Base Color"].default_value = (0.3, 0.25, 0.2, 1.0)
+        log("⚠️ Using default brown color (biome maps missing)")
 
     # Snow Material (Principled BSDF)
     snow_bsdf = mat_nodes.new("ShaderNodeBsdfPrincipled")
@@ -800,23 +974,6 @@ try:
     log("✅ Material created and assigned")
 
     # =============================================================================
-    # 10.5. Terrain Scale 적용
-    # =============================================================================
-
-    log("[10.5] Applying terrain scale...")
-    bpy.context.view_layer.objects.active = terrain_obj
-    terrain_obj.select_set(True)
-
-    terrain_obj.scale = (terrain_scale, terrain_scale, z_scale)
-    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-
-    final_size = base_size * terrain_scale
-    max_height = height_multiplier * z_scale
-
-    log(f"✅ Scale applied: XY={terrain_scale}x, Z={z_scale}x")
-    log(f"   Final size: {final_size:,}m × {final_size:,}m × {max_height}m")
-
-    # =============================================================================
     # 10.6. Geometry Nodes Modifier Apply
     # =============================================================================
 
@@ -873,6 +1030,27 @@ try:
         log(f"After Subdivision - Vertex count: {len(terrain_obj.data.vertices):,}")
     except Exception as e:
         log(f"❌ Failed to apply Subdivision: {e}")
+
+    # =============================================================================
+    # 10.8. Terrain Scale 적용 (Subdivision 이후)
+    # =============================================================================
+
+    log("[10.8] Applying terrain scale (after subdivision)...")
+    bpy.context.view_layer.objects.active = terrain_obj
+    terrain_obj.select_set(True)
+
+    # 🔧 Z축 높이를 25% 감소 (next.md 3번 - 50%의 50%)
+    z_scale_final = z_scale * 0.25
+    log(f"🔧 Z-scale final adjustment: {z_scale} → {z_scale_final} (75% reduction)")
+
+    terrain_obj.scale = (terrain_scale, terrain_scale, z_scale_final)
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+
+    final_size = base_size * terrain_scale
+    max_height = height_multiplier * z_scale_final
+
+    log(f"✅ Scale applied: XY={terrain_scale}x, Z={z_scale_final}x")
+    log(f"   Final size: {final_size:,}m × {final_size:,}m × {max_height}m")
 
     # =============================================================================
     # 11. 카메라 설정 (Orthographic Top-Down)
@@ -949,7 +1127,7 @@ try:
     # EEVEE_NEXT 엔진으로 렌더링 (빠르고 GPU 사용)
     import time
 
-    log("Using EEVEE_NEXT engine for fast rendering...")
+    log("Using EEVEE_NEXT with shadow disabled rendering...")
 
     scene.render.engine = "BLENDER_EEVEE_NEXT"
 
@@ -957,9 +1135,14 @@ try:
     scene.render.image_settings.file_format = "PNG"
     scene.render.filepath = PREVIEW_PATH
 
-    # EEVEE 설정
-    scene.eevee.use_gtao = True  # Ambient Occlusion
-    scene.eevee.gtao_distance = 10
+    # ✅ 2️⃣ 개별 라이트의 그림자 끄기
+    for obj in bpy.data.objects:
+        if obj.type == "LIGHT":
+            try:
+                obj.data.use_shadow = False
+                log(f"✅ Disabled shadows for light: {obj.name}")
+            except AttributeError:
+                log(f"⚠️ Cannot disable shadows for {obj.name}")
 
     log(f"Render settings:")
     log(f"  Engine: {scene.render.engine}")

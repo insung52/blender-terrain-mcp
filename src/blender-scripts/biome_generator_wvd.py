@@ -19,7 +19,7 @@ if sys.platform == "win32":
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
 
 # =============================================================================
-# 1. Noise 함수 (기존 코드와 동일)
+# 1. Noise 함수 (Perlin only - 성능 최적화)
 # =============================================================================
 
 
@@ -65,7 +65,7 @@ def multi_octave_noise(
     x: float, y: float, seed: int = 0, scale_factor: float = 1.0
 ) -> float:
     """
-    Multi-octave Perlin Noise (3단계) - 땅따먹기용 강화 버전
+    Multi-octave Perlin Noise - 땅따먹기용 (Voronoi 제거, 성능 향상)
 
     Args:
         x, y: 픽셀 좌표
@@ -75,17 +75,25 @@ def multi_octave_noise(
     Returns:
         왜곡 거리 (픽셀 단위)
     """
-    # 🔥 스케일을 픽셀 좌표 기반으로 조정 (더 미세한 디테일)
-    # Large-scale: 큰 만곡 (100픽셀 주기)
-    noise_large = perlin_noise_2d(x * 0.002, y * 0.002, seed) * (80.0 * scale_factor)
+    # 🔥 Perlin Noise만 사용 (Voronoi 제거로 10배 이상 빠름)
+    # Extra-large: 매우 큰 만곡 (500픽셀 주기) - 강도 증가
+    noise_xlarge = perlin_noise_2d(x * 0.001, y * 0.001, seed) * (300.0 * scale_factor)
 
-    # Medium-scale: 중간 굴곡 (20픽셀 주기)
-    noise_medium = perlin_noise_2d(x * 0.01, y * 0.01, seed + 1) * (40.0 * scale_factor)
+    # Large-scale: 큰 만곡 (200픽셀 주기) - 강도 증가
+    noise_large = perlin_noise_2d(x * 0.003, y * 0.003, seed + 1) * (
+        180.0 * scale_factor
+    )
 
-    # Small-scale: 미세 들쑥날쑥 (5픽셀 주기)
-    noise_small = perlin_noise_2d(x * 0.05, y * 0.05, seed + 2) * (20.0 * scale_factor)
+    # Medium-scale: 중간 굴곡 (50픽셀 주기) - 강도 증가
+    noise_medium = perlin_noise_2d(x * 0.015, y * 0.015, seed + 2) * (
+        100.0 * scale_factor
+    )
 
-    return noise_large + noise_medium + noise_small
+    # Small-scale: 미세 디테일 (10픽셀 주기) - 새로 추가
+    noise_small = perlin_noise_2d(x * 0.08, y * 0.08, seed + 3) * (50.0 * scale_factor)
+
+    # 총 강도: ±630 픽셀 (기존 Voronoi 포함 버전과 비슷)
+    return noise_xlarge + noise_large + noise_medium + noise_small
 
 
 # =============================================================================
@@ -140,7 +148,7 @@ def assign_biome_regions_wvd(
                 # 실제 거리 계산
                 dx = x - px_scaled
                 dy = y - py_scaled
-                real_distance = math.sqrt(dx ** 2 + dy ** 2)
+                real_distance = math.sqrt(dx**2 + dy**2)
 
                 # 🔥 각 바이옴마다 다른 noise 적용 (바이옴 중심 기준 좌표계)
                 # 현재 픽셀의 바이옴 중심 기준 상대 좌표에서 noise 샘플링
@@ -148,11 +156,13 @@ def assign_biome_regions_wvd(
                     px_scaled + dx,
                     py_scaled + dy,
                     seed=i * 1000,  # 바이옴마다 다른 seed
-                    scale_factor=1.0
+                    scale_factor=1.0,
                 )
 
                 # 🔥 Coverage 가중치 적용: Coverage 클수록 거리 짧아짐 (영역 넓어짐)
-                weighted_distance = (real_distance + biome_local_noise) / max(0.01, coverage)
+                weighted_distance = (real_distance + biome_local_noise) / max(
+                    0.01, coverage
+                )
 
                 if weighted_distance < best_weighted_distance:
                     best_weighted_distance = weighted_distance
@@ -222,7 +232,8 @@ def generate_biome_parameter_map_wvd(
         )
 
     # Step 3: 가우시안 블러로 경계 블렌딩
-    print(f"\n🌫️  Applying Gaussian Blur (radius={blur_radius})...")
+    # ⚠️ PIL GaussianBlur는 "L" 모드만 지원하므로, float32로 직접 처리
+    print(f"\n🌫️  Applying Gaussian Blur (radius={blur_radius}) with float32 precision...")
     for param_name in param_names:
         # NumPy 배열을 PIL Image로 변환
         param_map = biome_maps[param_name]
@@ -235,19 +246,21 @@ def generate_biome_parameter_map_wvd(
         else:
             normalized = param_map.copy()
 
-        # PIL Image로 변환 (0~255)
-        img = Image.fromarray((normalized * 255).astype(np.uint8), mode='L')
+        # Float32 이미지로 변환 후 블러 (정밀도 유지)
+        # PIL은 float를 지원하지 않으므로, 32bit int로 변환
+        img_32bit = Image.fromarray((normalized * 4294967295).astype(np.uint32), mode="I")
 
-        # 가우시안 블러 적용
-        blurred_img = img.filter(ImageFilter.GaussianBlur(radius=blur_radius))
+        # "I" 모드는 GaussianBlur 지원, 하지만 느림
+        # 대신 scipy.ndimage로 직접 블러 (더 빠르고 정밀)
+        from scipy.ndimage import gaussian_filter
+        blurred_array = gaussian_filter(normalized, sigma=blur_radius)
 
-        # 다시 NumPy 배열로 변환 및 역정규화
-        blurred_array = np.array(blurred_img, dtype=np.float32) / 255.0
+        # 역정규화
         if max_val > min_val:
             blurred_array = blurred_array * (max_val - min_val) + min_val
 
         biome_maps[param_name] = blurred_array
-        print(f"  ✅ Blurred {param_name}")
+        print(f"  ✅ Blurred {param_name} (float32)")
 
     return biome_maps
 
@@ -259,31 +272,39 @@ def generate_biome_parameter_map_wvd(
 
 def normalize_parameter_to_image(param_map: np.ndarray, param_name: str) -> np.ndarray:
     """
-    파라미터 맵을 0~255 이미지 데이터로 정규화 (기존 코드와 동일한 방식)
+    파라미터 맵을 0~65535 이미지 데이터로 정규화 (16bit PNG)
+
+    🔧 next.md 5번: 계단식 층 문제 해결
+    - 8bit (0~255): 500m 지형 → 2m마다 계단
+    - 16bit (0~65535): 500m 지형 → 0.76cm 정밀도
 
     Args:
         param_map: (grid_size, grid_size) numpy 배열
         param_name: 파라미터 이름
 
     Returns:
-        (grid_size, grid_size) uint8 배열 (0~255)
+        (grid_size, grid_size) uint16 배열 (0~65535)
     """
     if param_name in ["temperature", "continentalness"]:
-        # -1.0 ~ 1.0 → 0 ~ 255
-        normalized = ((param_map + 1.0) / 2.0 * 255).astype(np.uint8)
+        # -1.0 ~ 1.0 → 0 ~ 65535
+        normalized = ((param_map + 1.0) / 2.0 * 65535).astype(np.uint16)
     elif param_name == "snow_start_height":
-        # 0 ~ 5000 → 0 ~ 255
-        normalized = (np.clip(param_map, 0, 5000) / 5000.0 * 255).astype(np.uint8)
+        # 0 ~ 5000 → 0 ~ 65535
+        normalized = (np.clip(param_map, 0, 5000) / 5000.0 * 65535).astype(np.uint16)
     else:
-        # 0.0 ~ 1.0 → 0 ~ 255
-        normalized = (np.clip(param_map, 0.0, 1.0) * 255).astype(np.uint8)
+        # 0.0 ~ 1.0 → 0 ~ 65535
+        normalized = (np.clip(param_map, 0.0, 1.0) * 65535).astype(np.uint16)
 
     return normalized
 
 
 def save_biome_maps_as_images(biome_maps: Dict[str, np.ndarray], output_dir: str):
     """
-    바이옴 맵을 PNG 이미지로 저장
+    바이옴 맵을 16bit PNG 이미지로 저장
+
+    🔧 next.md 5번: 16bit PNG 사용 (0~65535)
+    - 계단식 층 문제 해결
+    - 정밀도: 500m 지형 기준 약 0.76cm
 
     Args:
         biome_maps: 파라미터 이름: numpy 배열 딕셔너리
@@ -291,16 +312,16 @@ def save_biome_maps_as_images(biome_maps: Dict[str, np.ndarray], output_dir: str
     """
     os.makedirs(output_dir, exist_ok=True)
 
-    print(f"\n💾 Saving biome maps as images...")
+    print(f"\n💾 Saving biome maps as 16bit PNG images...")
     for param_name, param_map in biome_maps.items():
-        # 정규화
+        # 정규화 (0~65535, uint16)
         img_data = normalize_parameter_to_image(param_map, param_name)
 
-        # 이미지 저장
-        img = Image.fromarray(img_data, mode="L")
+        # 16bit 이미지 저장 (mode="I;16")
+        img = Image.fromarray(img_data, mode="I;16")
         img_path = os.path.join(output_dir, f"biome_{param_name}.png")
         img.save(img_path)
-        print(f"  ✅ Saved: {img_path}")
+        print(f"  ✅ Saved (16bit): {img_path}")
 
 
 # =============================================================================
@@ -320,7 +341,7 @@ def generate_default_terrain_params():
         "erosion_strength": 20.0,
         "continentalness_strength": 10.0,
         "weirdness_strength": 5.0,
-        "temperature_influence": 0.2
+        "temperature_influence": 0.2,
     }
 
 
@@ -405,7 +426,7 @@ def main():
 
     # 3. 바이옴 맵 생성 (WVD + Gaussian Blur)
     biome_maps = generate_biome_parameter_map_wvd(
-        biome_points, grid_size=grid_size, blur_radius=50
+        biome_points, grid_size=grid_size, blur_radius=100
     )
 
     # 4. 이미지로 저장

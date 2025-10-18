@@ -122,9 +122,9 @@ export const PRESET_BIOMES_V1: Record<string, BiomePreset> = {
       vegetation_color_r: 0.3,
       vegetation_color_g: 0.6,
       vegetation_color_b: 0.2,
-      ground_color_r: 0.3,
-      ground_color_g: 0.25,
-      ground_color_b: 0.2,
+      ground_color_r: 0.3,      // 🟢 초록색 잔디밭 (vegetation_color와 동일)
+      ground_color_g: 0.6,      // 🟢 잔디가 덮인 평원
+      ground_color_b: 0.2,      // 🟢 GREEN
       snow_start_height: 9999,
       rock_exposure: 0.1
     },
@@ -164,9 +164,9 @@ export const PRESET_BIOMES_V1: Record<string, BiomePreset> = {
       vegetation_color_r: 0.2,
       vegetation_color_g: 0.5,
       vegetation_color_b: 0.2,
-      ground_color_r: 0.25,
-      ground_color_g: 0.2,
-      ground_color_b: 0.15,
+      ground_color_r: 0.25,     // 🟢 어두운 초록 (숲 바닥의 풀/이끼)
+      ground_color_g: 0.4,      // 🟢 약간 어두운 초록색
+      ground_color_b: 0.2,      // 🟢 DARK GREEN
       snow_start_height: 9999,
       rock_exposure: 0.2
     },

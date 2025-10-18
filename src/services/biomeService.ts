@@ -32,12 +32,23 @@ Generate a biome layout based on the user's description.
         "erosion": number,          // 0.0 ~ 1.0
         "continentalness": number,  // -1.0 ~ 1.0
         "weirdness": number,        // 0.0 ~ 1.0
-        "vegetation_color_r": number,
-        "vegetation_color_g": number,
-        "vegetation_color_b": number,
-        "ground_color_r": number,
-        "ground_color_g": number,
-        "ground_color_b": number,
+
+        // 🌿 vegetation_color: Color for vegetation objects (trees, grass objects) - will be used later for object placement
+        "vegetation_color_r": number,  // 0.0 ~ 1.0 (RGB)
+        "vegetation_color_g": number,  // 0.0 ~ 1.0
+        "vegetation_color_b": number,  // 0.0 ~ 1.0
+
+        // 🟫 ground_color: MAIN terrain color (what you actually see on the ground mesh)
+        // Examples:
+        //   - Grass plains: GREEN (0.3, 0.6, 0.2) - covered with grass
+        //   - Desert: SANDY YELLOW (0.8, 0.7, 0.4) - sand color
+        //   - Swamp: DARK GREEN/GRAY (0.25, 0.3, 0.2) - murky water/mud
+        //   - Snow: WHITE (0.9, 0.9, 0.95) - snow covered
+        //   - Rocky mountain: GRAY/BROWN (0.4, 0.4, 0.45) - exposed rock
+        "ground_color_r": number,  // 0.0 ~ 1.0 (RGB)
+        "ground_color_g": number,  // 0.0 ~ 1.0
+        "ground_color_b": number,  // 0.0 ~ 1.0
+
         "snow_start_height": number,
         "rock_exposure": number
       },
@@ -58,10 +69,17 @@ Generate a biome layout based on the user's description.
    - Top: y ≈ 75~85
    - Middle: y ≈ 40~60
    - Bottom: y ≈ 15~25
-4. Coverage: Larger biomes = 0.3~0.5, Smaller biomes = 0.1~0.2
-5. Blend distance: Natural transitions = 15~20, Sharp boundaries = 5~10
-6. Use preset biomes when possible, but feel free to customize parameters
-7. Boundary blending creates automatic transition biomes (plains + lake → beach)
+4. Coverage rules:
+   - 🏔️ **Mountains/Hills (continentalness > 0.5)**: ALWAYS use small coverage = 0.2~0.35
+     - Mountains should be sharp peaks, not wide plateaus
+     - Exception: User explicitly says "very large mountain range" → 0.35~0.45
+   - Plains/Deserts/Forests: Normal coverage = 0.25~0.35
+   - Lakes/Swamps: Small to medium = 0.15~0.25
+5. Erosion for mountains:
+   - Mountains should have high erosion (0.7~0.9) for rugged, rocky appearance
+6. Blend distance: Natural transitions = 15~20, Sharp boundaries = 5~10
+7. Use preset biomes when possible, but feel free to customize parameters
+8. Boundary blending creates automatic transition biomes (plains + lake → beach)
 
 **Examples:**
 
@@ -72,19 +90,19 @@ AI Response:
     {
       "position": [15, 50],
       "biome_params": { /* snowy_mountain preset */ },
-      "coverage": 0.25,
+      "coverage": 0.25,  // 🏔️ Mountain: small coverage for sharp peak
       "description": "snowy_mountain"
     },
     {
       "position": [50, 50],
       "biome_params": { /* plains preset */ },
-      "coverage": 0.4,
+      "coverage": 0.35,  // Plains: normal coverage
       "description": "plains"
     },
     {
       "position": [85, 50],
       "biome_params": { /* desert preset */ },
-      "coverage": 0.25,
+      "coverage": 0.3,  // Desert: normal coverage
       "description": "desert"
     }
   ],
