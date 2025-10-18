@@ -294,22 +294,42 @@ app.delete('/api/terrain/:terrainId', async (req, res) => {
 
     // Delete terrain files
     const fs = require('fs');
+    const path = require('path');
+
     if (terrain.blendFilePath) {
       try {
         if (fs.existsSync(terrain.blendFilePath)) {
           fs.unlinkSync(terrain.blendFilePath);
+          console.log(`Deleted blend file: ${terrain.blendFilePath}`);
         }
       } catch (err) {
         console.error(`Failed to delete terrain blend file: ${terrain.blendFilePath}`, err);
       }
     }
+
     if (terrain.topViewPath) {
       try {
         if (fs.existsSync(terrain.topViewPath)) {
           fs.unlinkSync(terrain.topViewPath);
+          console.log(`Deleted preview: ${terrain.topViewPath}`);
+        }
+
+        // 로그 파일 삭제 (preview 경로 기반)
+        const logPath = terrain.topViewPath.replace('.png', '_log.txt');
+        if (fs.existsSync(logPath)) {
+          fs.unlinkSync(logPath);
+          console.log(`Deleted log file: ${logPath}`);
+        }
+
+        // 바이옴 폴더 삭제 (preview 경로에서 ID 추출)
+        const previewBasename = path.basename(terrain.topViewPath, '_preview.png');
+        const biomeFolderPath = path.join(path.dirname(terrain.topViewPath), `biome_${previewBasename}`);
+        if (fs.existsSync(biomeFolderPath)) {
+          fs.rmSync(biomeFolderPath, { recursive: true, force: true });
+          console.log(`Deleted biome folder: ${biomeFolderPath}`);
         }
       } catch (err) {
-        console.error(`Failed to delete terrain preview: ${terrain.topViewPath}`, err);
+        console.error(`Failed to delete terrain preview files: ${terrain.topViewPath}`, err);
       }
     }
 
@@ -340,22 +360,41 @@ app.delete('/api/road/:roadId', async (req, res) => {
 
     // Delete road files
     const fs = require('fs');
+    const path = require('path');
+
     if (road.blendFilePath) {
       try {
         if (fs.existsSync(road.blendFilePath)) {
           fs.unlinkSync(road.blendFilePath);
+          console.log(`Deleted road blend file: ${road.blendFilePath}`);
+        }
+
+        // 파라미터 파일 삭제 (blend 파일과 같은 이름)
+        const paramsPath = road.blendFilePath.replace('.blend', '_params.json');
+        if (fs.existsSync(paramsPath)) {
+          fs.unlinkSync(paramsPath);
+          console.log(`Deleted road params: ${paramsPath}`);
         }
       } catch (err) {
         console.error(`Failed to delete road blend file: ${road.blendFilePath}`, err);
       }
     }
+
     if (road.previewPath) {
       try {
         if (fs.existsSync(road.previewPath)) {
           fs.unlinkSync(road.previewPath);
+          console.log(`Deleted road preview: ${road.previewPath}`);
+        }
+
+        // 로그 파일 삭제 (preview 경로 기반)
+        const logPath = road.previewPath.replace('.png', '_log.txt');
+        if (fs.existsSync(logPath)) {
+          fs.unlinkSync(logPath);
+          console.log(`Deleted road log file: ${logPath}`);
         }
       } catch (err) {
-        console.error(`Failed to delete road preview: ${road.previewPath}`, err);
+        console.error(`Failed to delete road preview files: ${road.previewPath}`, err);
       }
     }
 

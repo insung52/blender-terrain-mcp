@@ -1,429 +1,695 @@
-"""
-Blender에서 실행되는 바이옴 지형 생성 스크립트
-Geometry Nodes를 사용하여 이미지 기반 지형 생성
-
-Usage:
-    blender --background --python biome_terrain_blender.py -- <image_dir> <output_blend>
-"""
-
 import bpy
 import sys
 import os
 import math
+import json
+import traceback
 
-# =============================================================================
+# 로그 파일 설정
+LOG_FILE = None
+
+
+def log(message):
+    """콘솔과 파일에 동시 출력"""
+    print(message)
+    if LOG_FILE:
+        try:
+            with open(LOG_FILE, "a", encoding="utf-8") as f:
+                f.write(message + "\n")
+        except:
+            pass
+
+
 # 커맨드라인 인자 파싱
-# =============================================================================
 
 argv = sys.argv
-argv = argv[argv.index("--") + 1:]  # -- 이후의 인자들만
+argv = argv[argv.index("--") + 1 :]
 
-if len(argv) < 2:
-    print("Usage: blender --background --python biome_terrain_blender.py -- <image_dir> <output_blend>")
+if len(argv) < 4:
+    print(
+        "Usage: blender --background --python biome_terrain_blender.py -- <image_dir> <params_file> <output_blend> <preview_path>"
+    )
     sys.exit(1)
 
 IMAGE_DIR = argv[0]
-OUTPUT_BLEND = argv[1]
+PARAMS_FILE = argv[1]
+OUTPUT_BLEND = argv[2]
+PREVIEW_PATH = argv[3]
 
-print(f"📂 Image Directory: {IMAGE_DIR}")
-print(f"💾 Output Blend: {OUTPUT_BLEND}")
+# 로그 파일 경로 설정
+LOG_FILE = PREVIEW_PATH.replace(".png", "_log.txt")
 
-# =============================================================================
-# 1. 기존 객체 삭제
-# =============================================================================
+# 로그 파일 초기화
+with open(LOG_FILE, "w", encoding="utf-8") as f:
+    f.write("=== Biome Terrain Blender Log ===\n\n")
 
-bpy.ops.object.select_all(action='SELECT')
-bpy.ops.object.delete()
+log(f"[Biome Terrain] Image Directory: {IMAGE_DIR}")
+log(f"[Biome Terrain] Parameters: {PARAMS_FILE}")
+log(f"[Biome Terrain] Output: {OUTPUT_BLEND}")
+log(f"[Biome Terrain] Preview: {PREVIEW_PATH}")
+log(f"[Biome Terrain] Log File: {LOG_FILE}")
 
-# =============================================================================
-# 2. 100x100 그리드 메시 생성
-# =============================================================================
+# 파라미터 로드
 
-bpy.ops.mesh.primitive_grid_add(
-    x_subdivisions=100,
-    y_subdivisions=100,
-    size=100,
-    location=(0, 0, 0)
-)
+try:
+    with open(PARAMS_FILE, "r", encoding="utf-8") as f:
+        params = json.load(f)
+    log(f"✅ Parameters loaded")
+except Exception as e:
+    log(f"❌ Failed to load parameters: {e}")
+    log(traceback.format_exc())
+    sys.exit(1)
 
-terrain_obj = bpy.context.active_object
-terrain_obj.name = "BiomeTerrain"
-mesh = terrain_obj.data
+# 기본값
+base_size = 100
+grid_subdivisions = params.get("grid_subdivisions", 200)
+terrain_scale = params.get("terrain_scale", 10)  # 10배 = 1km
+height_multiplier = params.get("height_multiplier", 30)
+z_scale = params.get("z_scale", 3)
 
-print(f"✅ Created 100x100 grid mesh ({len(mesh.vertices)} vertices)")
+noise_scale = params.get("noise_scale", 0.05)
+noise_detail = params.get("noise_detail", 5.0)
 
-# =============================================================================
-# 3. 바이옴 이미지 로드
-# =============================================================================
+erosion_strength = params.get("erosion_strength", 20.0)
+continentalness_strength = params.get("continentalness_strength", 10.0)
+weirdness_strength = params.get("weirdness_strength", 5.0)
+temperature_influence = params.get("temperature_influence", 0.2)
 
-param_names = [
-    'temperature', 'humidity', 'erosion', 'continentalness', 'weirdness',
-    'vegetation_color_r', 'vegetation_color_g', 'vegetation_color_b',
-    'ground_color_r', 'ground_color_g', 'ground_color_b',
-    'snow_start_height', 'rock_exposure'
-]
+final_size = base_size * terrain_scale
+max_height = height_multiplier * z_scale
 
-loaded_images = {}
+log(f"[Biome Terrain] Grid: {grid_subdivisions}×{grid_subdivisions}")
+log(f"[Biome Terrain] Final size: {final_size}m × {final_size}m × {max_height}m")
+log("")
 
-for param_name in param_names:
-    img_path = os.path.join(IMAGE_DIR, f'biome_{param_name}.png')
-    if os.path.exists(img_path):
-        # 이미 로드된 이미지가 있으면 제거
-        if f'biome_{param_name}' in bpy.data.images:
-            bpy.data.images.remove(bpy.data.images[f'biome_{param_name}'])
+# 메인 실행 (에러 캡처)
 
-        img = bpy.data.images.load(img_path)
-        img.name = f'biome_{param_name}'
-        loaded_images[param_name] = img
-        print(f'✅ Loaded: {param_name} ({img.size[0]}x{img.size[1]})')
+try:
+    # 1. 기존 객체 삭제
+
+    log("[1] Deleting existing objects...")
+    bpy.ops.object.select_all(action="SELECT")
+    bpy.ops.object.delete()
+    log("✅ Objects deleted")
+
+    # =============================================================================
+    # 2. 그리드 메시 생성
+    # =============================================================================
+
+    log("[2] Creating grid mesh...")
+    bpy.ops.mesh.primitive_grid_add(
+        x_subdivisions=grid_subdivisions,
+        y_subdivisions=grid_subdivisions,
+        size=base_size,
+        location=(0, 0, 0),
+    )
+
+    terrain_obj = bpy.context.active_object
+    terrain_obj.name = "BiomeTerrain"
+    mesh = terrain_obj.data
+
+    log(
+        f"✅ Grid mesh: {grid_subdivisions}×{grid_subdivisions} = {len(mesh.vertices):,} vertices"
+    )
+
+    # =============================================================================
+    # 3. 바이옴 이미지 로드
+    # =============================================================================
+
+    log("[3] Loading biome images...")
+    param_names = [
+        "temperature",
+        "humidity",
+        "erosion",
+        "continentalness",
+        "weirdness",
+        "vegetation_color_r",
+        "vegetation_color_g",
+        "vegetation_color_b",
+        "ground_color_r",
+        "ground_color_g",
+        "ground_color_b",
+        "snow_start_height",
+        "rock_exposure",
+    ]
+
+    loaded_images = {}
+
+    for param_name in param_names:
+        img_path = os.path.join(IMAGE_DIR, f"biome_{param_name}.png")
+        if os.path.exists(img_path):
+            # 이미 로드된 이미지가 있으면 제거
+            if f"biome_{param_name}" in bpy.data.images:
+                bpy.data.images.remove(bpy.data.images[f"biome_{param_name}"])
+
+            img = bpy.data.images.load(img_path)
+            img.name = f"biome_{param_name}"
+            loaded_images[param_name] = img
+            log(f"✅ Loaded: {param_name} ({img.size[0]}x{img.size[1]})")
+        else:
+            log(f"❌ Not found: {img_path}")
+
+    # =============================================================================
+    # 4. Geometry Nodes 모디파이어 추가
+    # =============================================================================
+
+    log("[4] Creating Geometry Nodes modifier...")
+    # Geometry Nodes 모디파이어 생성
+    modifier = terrain_obj.modifiers.new(name="BiomeTerrainGenerator", type="NODES")
+
+    # Node Group 생성
+    node_group = bpy.data.node_groups.new(name="BiomeTerrain", type="GeometryNodeTree")
+    modifier.node_group = node_group
+
+    # Input/Output 노드
+    nodes = node_group.nodes
+    links = node_group.links
+
+    group_input = nodes.new("NodeGroupInput")
+    group_output = nodes.new("NodeGroupOutput")
+
+    group_input.location = (-1000, 0)
+    group_output.location = (1000, 0)
+
+    # Input/Output 소켓 정의
+    node_group.interface.new_socket(
+        name="Geometry", in_out="INPUT", socket_type="NodeSocketGeometry"
+    )
+    node_group.interface.new_socket(
+        name="Geometry", in_out="OUTPUT", socket_type="NodeSocketGeometry"
+    )
+
+    # =============================================================================
+    # 5. Geometry Nodes 그래프 생성
+    # =============================================================================
+
+    log("[5] Building Geometry Nodes graph...")
+    # Position 노드
+    position_node = nodes.new("GeometryNodeInputPosition")
+    position_node.location = (-800, 0)
+
+    # Separate XYZ
+    separate_xyz = nodes.new("ShaderNodeSeparateXYZ")
+    separate_xyz.location = (-600, 0)
+    links.new(position_node.outputs["Position"], separate_xyz.inputs["Vector"])
+
+    # Normalize X, Y to 0~1
+    half_size = base_size / 2.0
+
+    add_x_node = nodes.new("ShaderNodeMath")
+    add_x_node.operation = "ADD"
+    add_x_node.inputs[1].default_value = half_size
+    add_x_node.location = (-400, 200)
+    links.new(separate_xyz.outputs["X"], add_x_node.inputs[0])
+
+    divide_x_node = nodes.new("ShaderNodeMath")
+    divide_x_node.operation = "DIVIDE"
+    divide_x_node.inputs[1].default_value = base_size
+    divide_x_node.location = (-200, 200)
+    links.new(add_x_node.outputs["Value"], divide_x_node.inputs[0])
+
+    add_y_node = nodes.new("ShaderNodeMath")
+    add_y_node.operation = "ADD"
+    add_y_node.inputs[1].default_value = half_size
+    add_y_node.location = (-400, 0)
+    links.new(separate_xyz.outputs["Y"], add_y_node.inputs[0])
+
+    divide_y_node = nodes.new("ShaderNodeMath")
+    divide_y_node.operation = "DIVIDE"
+    divide_y_node.inputs[1].default_value = base_size
+    divide_y_node.location = (-200, 0)
+    links.new(add_y_node.outputs["Value"], divide_y_node.inputs[0])
+
+    # Combine XY for UV
+    combine_xy = nodes.new("ShaderNodeCombineXYZ")
+    combine_xy.location = (0, 100)
+    links.new(divide_x_node.outputs["Value"], combine_xy.inputs["X"])
+    links.new(divide_y_node.outputs["Value"], combine_xy.inputs["Y"])
+
+    # =============================================================================
+    # 6. Image Texture 샘플링 및 Attribute 저장
+    # =============================================================================
+
+    # 각 파라미터에 대해 Image Texture + Map Range + Store Named Attribute
+    current_y = 500
+
+    # 지형 높이에 사용할 파라미터만 로드 (temperature, erosion, continentalness, weirdness)
+    height_params = ["temperature", "erosion", "continentalness", "weirdness"]
+
+    stored_attributes = {}
+
+    for param_name in height_params:
+        if param_name not in loaded_images:
+            continue
+
+        # Image Texture 노드
+        img_tex_node = nodes.new("GeometryNodeImageTexture")
+        img_tex_node.location = (200, current_y)
+        # Blender 4.5+에서는 inputs['Image']로 이미지 설정
+        img_tex_node.inputs["Image"].default_value = loaded_images[param_name]
+        # interpolation은 extension_type으로 변경됨
+        img_tex_node.extension = "EXTEND"
+        links.new(combine_xy.outputs["Vector"], img_tex_node.inputs["Vector"])
+
+        # Map Range (0~1 이미지 값을 파라미터 범위로 변환)
+        map_range = nodes.new("ShaderNodeMapRange")
+        map_range.location = (400, current_y)
+
+        if param_name in ["temperature", "continentalness"]:
+            # 0~1 → -1~1
+            map_range.inputs["From Min"].default_value = 0.0
+            map_range.inputs["From Max"].default_value = 1.0
+            map_range.inputs["To Min"].default_value = -1.0
+            map_range.inputs["To Max"].default_value = 1.0
+        else:
+            # 0~1 → 0~1 (그대로)
+            map_range.inputs["From Min"].default_value = 0.0
+            map_range.inputs["From Max"].default_value = 1.0
+            map_range.inputs["To Min"].default_value = 0.0
+            map_range.inputs["To Max"].default_value = 1.0
+
+        links.new(img_tex_node.outputs["Color"], map_range.inputs["Value"])
+
+        # Store Named Attribute
+        store_attr = nodes.new("GeometryNodeStoreNamedAttribute")
+        store_attr.location = (600, current_y)
+        store_attr.data_type = "FLOAT"
+        store_attr.domain = "POINT"
+        store_attr.inputs["Name"].default_value = param_name
+
+        links.new(map_range.outputs["Result"], store_attr.inputs["Value"])
+
+        # 체인 연결 (Input → Store Attr → Output)
+        if not stored_attributes:
+            # 첫 번째
+            links.new(group_input.outputs["Geometry"], store_attr.inputs["Geometry"])
+        else:
+            # 이전 노드에서 연결
+            prev_node = list(stored_attributes.values())[-1]
+            links.new(prev_node.outputs["Geometry"], store_attr.inputs["Geometry"])
+
+        stored_attributes[param_name] = store_attr
+
+        current_y -= 300
+
+    # =============================================================================
+    # 7. Named Attribute 읽기 + Noise Texture + 지형 높이 계산
+    # =============================================================================
+
+    last_store_node = list(stored_attributes.values())[-1]
+
+    # Named Attributes
+    attr_temp = nodes.new("GeometryNodeInputNamedAttribute")
+    attr_temp.location = (800, 400)
+    attr_temp.data_type = "FLOAT"
+    attr_temp.inputs["Name"].default_value = "temperature"
+
+    attr_erosion = nodes.new("GeometryNodeInputNamedAttribute")
+    attr_erosion.location = (800, 200)
+    attr_erosion.data_type = "FLOAT"
+    attr_erosion.inputs["Name"].default_value = "erosion"
+
+    attr_continentalness = nodes.new("GeometryNodeInputNamedAttribute")
+    attr_continentalness.location = (800, 0)
+    attr_continentalness.data_type = "FLOAT"
+    attr_continentalness.inputs["Name"].default_value = "continentalness"
+
+    attr_weirdness = nodes.new("GeometryNodeInputNamedAttribute")
+    attr_weirdness.location = (800, -200)
+    attr_weirdness.data_type = "FLOAT"
+    attr_weirdness.inputs["Name"].default_value = "weirdness"
+
+    # Noise Texture (기본)
+    noise_node = nodes.new("ShaderNodeTexNoise")
+    noise_node.location = (1000, -400)
+    noise_node.inputs["Scale"].default_value = noise_scale
+    noise_node.inputs["Detail"].default_value = noise_detail
+    links.new(position_node.outputs["Position"], noise_node.inputs["Vector"])
+
+    # Noise Texture (weirdness용)
+    noise_weird = nodes.new("ShaderNodeTexNoise")
+    noise_weird.location = (1000, -600)
+    noise_weird.inputs["Scale"].default_value = noise_scale * 4.0
+    noise_weird.inputs["Detail"].default_value = max(1.0, noise_detail - 2.0)
+    links.new(position_node.outputs["Position"], noise_weird.inputs["Vector"])
+
+    # Height = Noise * erosion * erosion_strength
+    multiply_noise_erosion = nodes.new("ShaderNodeMath")
+    multiply_noise_erosion.operation = "MULTIPLY"
+    multiply_noise_erosion.location = (1200, 200)
+    links.new(noise_node.outputs["Fac"], multiply_noise_erosion.inputs[0])
+    links.new(attr_erosion.outputs["Attribute"], multiply_noise_erosion.inputs[1])
+
+    multiply_erosion_strength = nodes.new("ShaderNodeMath")
+    multiply_erosion_strength.operation = "MULTIPLY"
+    multiply_erosion_strength.inputs[1].default_value = erosion_strength
+    multiply_erosion_strength.location = (1400, 200)
+    links.new(
+        multiply_noise_erosion.outputs["Value"], multiply_erosion_strength.inputs[0]
+    )
+
+    # continentalness * continentalness_strength
+    multiply_cont_strength = nodes.new("ShaderNodeMath")
+    multiply_cont_strength.operation = "MULTIPLY"
+    multiply_cont_strength.inputs[1].default_value = continentalness_strength
+    multiply_cont_strength.location = (1200, 0)
+    links.new(
+        attr_continentalness.outputs["Attribute"], multiply_cont_strength.inputs[0]
+    )
+
+    # weirdness * Noise * weirdness_strength
+    multiply_weird_noise = nodes.new("ShaderNodeMath")
+    multiply_weird_noise.operation = "MULTIPLY"
+    multiply_weird_noise.location = (1200, -200)
+    links.new(attr_weirdness.outputs["Attribute"], multiply_weird_noise.inputs[0])
+    links.new(noise_weird.outputs["Fac"], multiply_weird_noise.inputs[1])
+
+    multiply_weirdness_strength = nodes.new("ShaderNodeMath")
+    multiply_weirdness_strength.operation = "MULTIPLY"
+    multiply_weirdness_strength.inputs[1].default_value = weirdness_strength
+    multiply_weirdness_strength.location = (1400, -200)
+    links.new(
+        multiply_weird_noise.outputs["Value"], multiply_weirdness_strength.inputs[0]
+    )
+
+    # Height += continentalness
+    add_cont = nodes.new("ShaderNodeMath")
+    add_cont.operation = "ADD"
+    add_cont.location = (1600, 100)
+    links.new(multiply_erosion_strength.outputs["Value"], add_cont.inputs[0])
+    links.new(multiply_cont_strength.outputs["Value"], add_cont.inputs[1])
+
+    # Height += weirdness
+    add_weird = nodes.new("ShaderNodeMath")
+    add_weird.operation = "ADD"
+    add_weird.location = (1800, 100)
+    links.new(add_cont.outputs["Value"], add_weird.inputs[0])
+    links.new(multiply_weirdness_strength.outputs["Value"], add_weird.inputs[1])
+
+    # Height *= (1.0 - temperature * temperature_influence)
+    multiply_temp_influence = nodes.new("ShaderNodeMath")
+    multiply_temp_influence.operation = "MULTIPLY"
+    multiply_temp_influence.inputs[1].default_value = temperature_influence
+    multiply_temp_influence.location = (1600, 400)
+    links.new(attr_temp.outputs["Attribute"], multiply_temp_influence.inputs[0])
+
+    subtract_from_1 = nodes.new("ShaderNodeMath")
+    subtract_from_1.operation = "SUBTRACT"
+    subtract_from_1.inputs[0].default_value = 1.0
+    subtract_from_1.location = (1800, 400)
+    links.new(multiply_temp_influence.outputs["Value"], subtract_from_1.inputs[1])
+
+    multiply_final = nodes.new("ShaderNodeMath")
+    multiply_final.operation = "MULTIPLY"
+    multiply_final.location = (2000, 250)
+    links.new(add_weird.outputs["Value"], multiply_final.inputs[0])
+    links.new(subtract_from_1.outputs["Value"], multiply_final.inputs[1])
+
+    # =============================================================================
+    # 8. Set Position (Z offset)
+    # =============================================================================
+
+    combine_offset = nodes.new("ShaderNodeCombineXYZ")
+    combine_offset.location = (2200, 250)
+    combine_offset.inputs["X"].default_value = 0.0
+    combine_offset.inputs["Y"].default_value = 0.0
+    links.new(multiply_final.outputs["Value"], combine_offset.inputs["Z"])
+
+    set_position = nodes.new("GeometryNodeSetPosition")
+    set_position.location = (2400, 0)
+    links.new(last_store_node.outputs["Geometry"], set_position.inputs["Geometry"])
+    links.new(combine_offset.outputs["Vector"], set_position.inputs["Offset"])
+
+    # =============================================================================
+    # 9. Set Shade Smooth
+    # =============================================================================
+
+    set_smooth = nodes.new("GeometryNodeSetShadeSmooth")
+    set_smooth.location = (2600, 0)
+    set_smooth.inputs["Shade Smooth"].default_value = True
+    links.new(set_position.outputs["Geometry"], set_smooth.inputs["Geometry"])
+
+    # Output 연결
+    links.new(set_smooth.outputs["Geometry"], group_output.inputs["Geometry"])
+
+    log("✅ Geometry Nodes graph created")
+
+    # =============================================================================
+    # 10. Material 추가 (간단한 높이 기반 색상)
+    # =============================================================================
+
+    material = bpy.data.materials.new(name="BiomeTerrainMaterial")
+    material.use_nodes = True
+    material_nodes = material.node_tree.nodes
+    material_links = material.node_tree.links
+
+    # 기존 노드 삭제
+    material_nodes.clear()
+
+    # Output
+    mat_output = material_nodes.new("ShaderNodeOutputMaterial")
+    mat_output.location = (400, 0)
+
+    # Principled BSDF
+    bsdf = material_nodes.new("ShaderNodeBsdfPrincipled")
+    bsdf.location = (200, 0)
+
+    # ColorRamp (높이 기반 색상)
+    color_ramp = material_nodes.new("ShaderNodeValToRGB")
+    color_ramp.location = (0, 0)
+    color_ramp.color_ramp.elements[0].color = (0.2, 0.15, 0.1, 1.0)  # 낮은 곳: 갈색
+    color_ramp.color_ramp.elements[1].color = (0.9, 0.9, 0.9, 1.0)  # 높은 곳: 흰색
+
+    # Position Z
+    position_mat = material_nodes.new("ShaderNodeNewGeometry")
+    position_mat.location = (-400, 0)
+
+    separate_xyz_mat = material_nodes.new("ShaderNodeSeparateXYZ")
+    separate_xyz_mat.location = (-200, 0)
+
+    material_links.new(
+        position_mat.outputs["Position"], separate_xyz_mat.inputs["Vector"]
+    )
+    material_links.new(separate_xyz_mat.outputs["Z"], color_ramp.inputs["Fac"])
+    material_links.new(color_ramp.outputs["Color"], bsdf.inputs["Base Color"])
+    material_links.new(bsdf.outputs["BSDF"], mat_output.inputs["Surface"])
+
+    # Material 할당
+    if terrain_obj.data.materials:
+        terrain_obj.data.materials[0] = material
     else:
-        print(f'❌ Not found: {img_path}')
+        terrain_obj.data.materials.append(material)
 
-# =============================================================================
-# 4. Geometry Nodes 모디파이어 추가
-# =============================================================================
+    log("✅ Material created and assigned")
 
-# Geometry Nodes 모디파이어 생성
-modifier = terrain_obj.modifiers.new(name="BiomeTerrainGenerator", type='NODES')
+    # =============================================================================
+    # 10.5. Terrain Scale 적용
+    # =============================================================================
 
-# Node Group 생성
-node_group = bpy.data.node_groups.new(name="BiomeTerrain", type='GeometryNodeTree')
-modifier.node_group = node_group
+    log("[10.5] Applying terrain scale...")
+    bpy.context.view_layer.objects.active = terrain_obj
+    terrain_obj.select_set(True)
 
-# Input/Output 노드
-nodes = node_group.nodes
-links = node_group.links
+    terrain_obj.scale = (terrain_scale, terrain_scale, z_scale)
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
 
-group_input = nodes.new('NodeGroupInput')
-group_output = nodes.new('NodeGroupOutput')
+    final_size = base_size * terrain_scale
+    max_height = height_multiplier * z_scale
 
-group_input.location = (-1000, 0)
-group_output.location = (1000, 0)
+    log(f"✅ Scale applied: XY={terrain_scale}x, Z={z_scale}x")
+    log(f"   Final size: {final_size:,}m × {final_size:,}m × {max_height}m")
 
-# Input/Output 소켓 정의
-node_group.interface.new_socket(name="Geometry", in_out='INPUT', socket_type='NodeSocketGeometry')
-node_group.interface.new_socket(name="Geometry", in_out='OUTPUT', socket_type='NodeSocketGeometry')
+    # =============================================================================
+    # 10.6. Geometry Nodes Modifier Apply
+    # =============================================================================
 
-# =============================================================================
-# 5. Geometry Nodes 그래프 생성
-# =============================================================================
+    log("[10.6] Applying Geometry Nodes modifier...")
+    bpy.context.view_layer.objects.active = terrain_obj
+    terrain_obj.select_set(True)
 
-# Position 노드
-position_node = nodes.new('GeometryNodeInputPosition')
-position_node.location = (-800, 0)
+    # Modifier 적용 전 상태 확인
+    log(f"Before apply - Vertex count: {len(terrain_obj.data.vertices):,}")
+    log(f"Before apply - Modifiers: {[m.name for m in terrain_obj.modifiers]}")
 
-# Separate XYZ
-separate_xyz = nodes.new('ShaderNodeSeparateXYZ')
-separate_xyz.location = (-600, 0)
-links.new(position_node.outputs['Position'], separate_xyz.inputs['Vector'])
+    # Modifier를 실제 메시로 적용
+    for modifier in terrain_obj.modifiers:
+        if modifier.type == "NODES":
+            log(f"   Applying modifier: {modifier.name}")
+            try:
+                bpy.ops.object.modifier_apply(modifier=modifier.name)
+                log(f"   ✅ Modifier applied successfully")
+            except Exception as e:
+                log(f"   ❌ Failed to apply modifier: {e}")
 
-# Normalize X, Y to 0~1 (그리드는 -50~50이므로 +50하고 /100)
-add_x_node = nodes.new('ShaderNodeMath')
-add_x_node.operation = 'ADD'
-add_x_node.inputs[1].default_value = 50.0
-add_x_node.location = (-400, 200)
-links.new(separate_xyz.outputs['X'], add_x_node.inputs[0])
+    log(f"After apply - Vertex count: {len(terrain_obj.data.vertices):,}")
+    log(f"After apply - Mesh bounds: {terrain_obj.dimensions}")
 
-divide_x_node = nodes.new('ShaderNodeMath')
-divide_x_node.operation = 'DIVIDE'
-divide_x_node.inputs[1].default_value = 100.0
-divide_x_node.location = (-200, 200)
-links.new(add_x_node.outputs['Value'], divide_x_node.inputs[0])
+    # 메시 검증
+    if len(terrain_obj.data.vertices) == 0:
+        log(f"❌ ERROR: Mesh has no vertices after modifier apply!")
+    if len(terrain_obj.data.polygons) == 0:
+        log(f"❌ ERROR: Mesh has no faces after modifier apply!")
 
-add_y_node = nodes.new('ShaderNodeMath')
-add_y_node.operation = 'ADD'
-add_y_node.inputs[1].default_value = 50.0
-add_y_node.location = (-400, 0)
-links.new(separate_xyz.outputs['Y'], add_y_node.inputs[0])
+    # =============================================================================
+    # 11. 카메라 설정 (Orthographic Top-Down)
+    # =============================================================================
 
-divide_y_node = nodes.new('ShaderNodeMath')
-divide_y_node.operation = 'DIVIDE'
-divide_y_node.inputs[1].default_value = 100.0
-divide_y_node.location = (-200, 0)
-links.new(add_y_node.outputs['Value'], divide_y_node.inputs[0])
+    log("[11] Setting up camera...")
+    camera_height = final_size * 1.5
+    bpy.ops.object.camera_add(location=(0, 0, camera_height))
+    camera = bpy.context.active_object
+    camera.rotation_euler = (0, 0, 0)
+    camera.data.type = "ORTHO"
+    camera.data.ortho_scale = final_size * 1.0
+    camera.data.clip_end = final_size * 5
+    bpy.context.scene.camera = camera
+    log(f"✅ Camera: Orthographic, scale={final_size}m, height={camera_height}m")
 
-# Combine XY for UV
-combine_xy = nodes.new('ShaderNodeCombineXYZ')
-combine_xy.location = (0, 100)
-links.new(divide_x_node.outputs['Value'], combine_xy.inputs['X'])
-links.new(divide_y_node.outputs['Value'], combine_xy.inputs['Y'])
+    # =============================================================================
+    # 12. 조명
+    # =============================================================================
 
-# =============================================================================
-# 6. Image Texture 샘플링 및 Attribute 저장
-# =============================================================================
+    log("[12] Adding lighting...")
+    bpy.ops.object.light_add(
+        type="SUN", location=(final_size / 2, final_size / 2, final_size * 2)
+    )
+    sun = bpy.context.active_object
+    sun.data.energy = 3.0
+    sun.rotation_euler = (math.radians(45), 0, math.radians(45))
+    log(f"✅ Sun light added (energy={sun.data.energy})")
 
-# 각 파라미터에 대해 Image Texture + Map Range + Store Named Attribute
-current_y = 500
+    # =============================================================================
+    # 13. 렌더 설정
+    # =============================================================================
 
-# 지형 높이에 사용할 파라미터만 로드 (temperature, erosion, continentalness, weirdness)
-height_params = ['temperature', 'erosion', 'continentalness', 'weirdness']
+    log("[13] Configuring render...")
+    scene = bpy.context.scene
+    scene.render.resolution_x = 1024
+    scene.render.resolution_y = 1024
+    scene.render.filepath = PREVIEW_PATH
 
-stored_attributes = {}
+    log(f"✅ Resolution: {scene.render.resolution_x}x{scene.render.resolution_y}")
+    log(f"✅ Output path: {PREVIEW_PATH}")
 
-for param_name in height_params:
-    if param_name not in loaded_images:
-        continue
+    # =============================================================================
+    # 14. 렌더링
+    # =============================================================================
 
-    # Image Texture 노드
-    img_tex_node = nodes.new('GeometryNodeImageTexture')
-    img_tex_node.location = (200, current_y)
-    # Blender 4.5+에서는 inputs['Image']로 이미지 설정
-    img_tex_node.inputs['Image'].default_value = loaded_images[param_name]
-    # interpolation은 extension_type으로 변경됨
-    img_tex_node.extension = 'EXTEND'
-    links.new(combine_xy.outputs['Vector'], img_tex_node.inputs['Vector'])
+    log("[14] Rendering preview...")
+    log(f"Camera: {scene.camera.name if scene.camera else 'None'}")
+    log(f"Camera type: {scene.camera.data.type if scene.camera else 'None'}")
+    log(f"Active objects: {len(bpy.context.scene.objects)}")
 
-    # Map Range (0~1 이미지 값을 파라미터 범위로 변환)
-    map_range = nodes.new('ShaderNodeMapRange')
-    map_range.location = (400, current_y)
+    # 씬 검증
+    log("Scene validation:")
+    for obj in scene.objects:
+        log(
+            f"  - {obj.name}: type={obj.type}, vertices={len(obj.data.vertices) if hasattr(obj.data, 'vertices') else 'N/A'}"
+        )
 
-    if param_name in ['temperature', 'continentalness']:
-        # 0~1 → -1~1
-        map_range.inputs['From Min'].default_value = 0.0
-        map_range.inputs['From Max'].default_value = 1.0
-        map_range.inputs['To Min'].default_value = -1.0
-        map_range.inputs['To Max'].default_value = 1.0
+    # 지형 객체 확인
+    terrain_in_scene = scene.objects.get("BiomeTerrain")
+    if terrain_in_scene:
+        log(
+            f"✅ Terrain found in scene: {len(terrain_in_scene.data.vertices):,} vertices"
+        )
+        log(f"   Dimensions: {terrain_in_scene.dimensions}")
+        log(f"   Location: {terrain_in_scene.location}")
     else:
-        # 0~1 → 0~1 (그대로)
-        map_range.inputs['From Min'].default_value = 0.0
-        map_range.inputs['From Max'].default_value = 1.0
-        map_range.inputs['To Min'].default_value = 0.0
-        map_range.inputs['To Max'].default_value = 1.0
+        log(f"❌ ERROR: BiomeTerrain not found in scene!")
 
-    links.new(img_tex_node.outputs['Color'], map_range.inputs['Value'])
+    # View layer 업데이트
+    bpy.context.view_layer.update()
+    log("View layer updated")
 
-    # Store Named Attribute
-    store_attr = nodes.new('GeometryNodeStoreNamedAttribute')
-    store_attr.location = (600, current_y)
-    store_attr.data_type = 'FLOAT'
-    store_attr.domain = 'POINT'
-    store_attr.inputs['Name'].default_value = param_name
+    # EEVEE_NEXT 엔진으로 렌더링 (빠르고 GPU 사용)
+    import time
 
-    links.new(map_range.outputs['Result'], store_attr.inputs['Value'])
+    log("Using EEVEE_NEXT engine for fast rendering...")
 
-    # 체인 연결 (Input → Store Attr → Output)
-    if not stored_attributes:
-        # 첫 번째
-        links.new(group_input.outputs['Geometry'], store_attr.inputs['Geometry'])
+    scene.render.engine = "BLENDER_EEVEE_NEXT"
+
+    # 파일 경로 명시적으로 설정
+    scene.render.image_settings.file_format = "PNG"
+    scene.render.filepath = PREVIEW_PATH
+
+    # EEVEE 설정
+    scene.eevee.use_gtao = True  # Ambient Occlusion
+    scene.eevee.gtao_distance = 10
+
+    log(f"Render settings:")
+    log(f"  Engine: {scene.render.engine}")
+    log(f"  Output: {scene.render.filepath}")
+
+    # 렌더링 실행
+    log("Starting EEVEE_NEXT render...")
+    try:
+        bpy.ops.render.render(write_still=True)
+        log("Render operation completed")
+    except Exception as e:
+        log(f"❌ Render failed: {e}")
+        log(traceback.format_exc())
+
+    # 대기
+    time.sleep(1.0)
+    log("Waited 1 second for render to complete")
+
+    # 렌더링 후 filepath 초기화 (blend 저장 시 덮어쓰기 방지!)
+    scene.render.filepath = "//untitled"
+    log("✅ Cleared render filepath to prevent overwrite")
+
+    # 렌더링 후 파일 존재 확인
+    if os.path.exists(PREVIEW_PATH):
+        file_size = os.path.getsize(PREVIEW_PATH)
+        log(f"✅ Preview file exists: {PREVIEW_PATH} ({file_size:,} bytes)")
+        if file_size == 0:
+            log(f"❌ ERROR: Preview file is 0 bytes!")
     else:
-        # 이전 노드에서 연결
-        prev_node = list(stored_attributes.values())[-1]
-        links.new(prev_node.outputs['Geometry'], store_attr.inputs['Geometry'])
+        log(f"❌ Preview file not created: {PREVIEW_PATH}")
 
-    stored_attributes[param_name] = store_attr
+    # =============================================================================
+    # 15. 저장
+    # =============================================================================
 
-    current_y -= 300
+    log("[15] Saving blend file...")
 
-# =============================================================================
-# 7. Named Attribute 읽기 + Noise Texture + 지형 높이 계산
-# =============================================================================
+    # 렌더링 완료 대기
+    import time
 
-last_store_node = list(stored_attributes.values())[-1]
+    time.sleep(1.0)
+    log("Waited for file system to flush")
 
-# Named Attributes
-attr_temp = nodes.new('GeometryNodeInputNamedAttribute')
-attr_temp.location = (800, 400)
-attr_temp.data_type = 'FLOAT'
-attr_temp.inputs['Name'].default_value = 'temperature'
+    # 프리뷰 파일 최종 확인
+    if os.path.exists(PREVIEW_PATH):
+        final_size_bytes = os.path.getsize(PREVIEW_PATH)
+        log(f"Preview file size before blend save: {final_size_bytes:,} bytes")
+        if final_size_bytes == 0:
+            log("❌ WARNING: Preview file is still 0 bytes!")
 
-attr_erosion = nodes.new('GeometryNodeInputNamedAttribute')
-attr_erosion.location = (800, 200)
-attr_erosion.data_type = 'FLOAT'
-attr_erosion.inputs['Name'].default_value = 'erosion'
+    bpy.ops.wm.save_as_mainfile(filepath=OUTPUT_BLEND)
+    if os.path.exists(OUTPUT_BLEND):
+        log(f"✅ Blend file saved: {OUTPUT_BLEND}")
+    else:
+        log(f"❌ Blend file not created: {OUTPUT_BLEND}")
 
-attr_continentalness = nodes.new('GeometryNodeInputNamedAttribute')
-attr_continentalness.location = (800, 0)
-attr_continentalness.data_type = 'FLOAT'
-attr_continentalness.inputs['Name'].default_value = 'continentalness'
+    # 최종 대기 (파일 시스템 flush 보장)
+    time.sleep(1.0)
 
-attr_weirdness = nodes.new('GeometryNodeInputNamedAttribute')
-attr_weirdness.location = (800, -200)
-attr_weirdness.data_type = 'FLOAT'
-attr_weirdness.inputs['Name'].default_value = 'weirdness'
+    log("\n[Biome Terrain] SUCCESS!")
+    log(f"[Biome Terrain] Blend: {OUTPUT_BLEND}")
+    log(f"[Biome Terrain] Preview: {PREVIEW_PATH}")
+    log(f"[Biome Terrain] Size: {final_size}m × {final_size}m × {max_height}m")
 
-# Noise Texture (기본)
-noise_node = nodes.new('ShaderNodeTexNoise')
-noise_node.location = (1000, -400)
-noise_node.inputs['Scale'].default_value = 0.05
-noise_node.inputs['Detail'].default_value = 5.0
-links.new(position_node.outputs['Position'], noise_node.inputs['Vector'])
+    # 로그 파일도 명시적으로 flush
+    if LOG_FILE:
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write("\n=== Script completed ===\n")
+            f.flush()
+            os.fsync(f.fileno())
 
-# Noise Texture (weirdness용)
-noise_weird = nodes.new('ShaderNodeTexNoise')
-noise_weird.location = (1000, -600)
-noise_weird.inputs['Scale'].default_value = 0.2
-noise_weird.inputs['Detail'].default_value = 3.0
-links.new(position_node.outputs['Position'], noise_weird.inputs['Vector'])
-
-# 지형 높이 계산: Height = Noise * erosion * 20.0
-multiply_noise_erosion = nodes.new('ShaderNodeMath')
-multiply_noise_erosion.operation = 'MULTIPLY'
-multiply_noise_erosion.location = (1200, 200)
-links.new(noise_node.outputs['Fac'], multiply_noise_erosion.inputs[0])
-links.new(attr_erosion.outputs['Attribute'], multiply_noise_erosion.inputs[1])
-
-multiply_by_20 = nodes.new('ShaderNodeMath')
-multiply_by_20.operation = 'MULTIPLY'
-multiply_by_20.inputs[1].default_value = 20.0
-multiply_by_20.location = (1400, 200)
-links.new(multiply_noise_erosion.outputs['Value'], multiply_by_20.inputs[0])
-
-# continentalness * 10.0
-multiply_cont_10 = nodes.new('ShaderNodeMath')
-multiply_cont_10.operation = 'MULTIPLY'
-multiply_cont_10.inputs[1].default_value = 10.0
-multiply_cont_10.location = (1200, 0)
-links.new(attr_continentalness.outputs['Attribute'], multiply_cont_10.inputs[0])
-
-# weirdness * Noise * 5.0
-multiply_weird_noise = nodes.new('ShaderNodeMath')
-multiply_weird_noise.operation = 'MULTIPLY'
-multiply_weird_noise.location = (1200, -200)
-links.new(attr_weirdness.outputs['Attribute'], multiply_weird_noise.inputs[0])
-links.new(noise_weird.outputs['Fac'], multiply_weird_noise.inputs[1])
-
-multiply_by_5 = nodes.new('ShaderNodeMath')
-multiply_by_5.operation = 'MULTIPLY'
-multiply_by_5.inputs[1].default_value = 5.0
-multiply_by_5.location = (1400, -200)
-links.new(multiply_weird_noise.outputs['Value'], multiply_by_5.inputs[0])
-
-# Height += continentalness * 10.0
-add_cont = nodes.new('ShaderNodeMath')
-add_cont.operation = 'ADD'
-add_cont.location = (1600, 100)
-links.new(multiply_by_20.outputs['Value'], add_cont.inputs[0])
-links.new(multiply_cont_10.outputs['Value'], add_cont.inputs[1])
-
-# Height += weirdness * Noise * 5.0
-add_weird = nodes.new('ShaderNodeMath')
-add_weird.operation = 'ADD'
-add_weird.location = (1800, 100)
-links.new(add_cont.outputs['Value'], add_weird.inputs[0])
-links.new(multiply_by_5.outputs['Value'], add_weird.inputs[1])
-
-# Height *= (1.0 - temperature * 0.2)
-multiply_temp_02 = nodes.new('ShaderNodeMath')
-multiply_temp_02.operation = 'MULTIPLY'
-multiply_temp_02.inputs[1].default_value = 0.2
-multiply_temp_02.location = (1600, 400)
-links.new(attr_temp.outputs['Attribute'], multiply_temp_02.inputs[0])
-
-subtract_from_1 = nodes.new('ShaderNodeMath')
-subtract_from_1.operation = 'SUBTRACT'
-subtract_from_1.inputs[0].default_value = 1.0
-subtract_from_1.location = (1800, 400)
-links.new(multiply_temp_02.outputs['Value'], subtract_from_1.inputs[1])
-
-multiply_final = nodes.new('ShaderNodeMath')
-multiply_final.operation = 'MULTIPLY'
-multiply_final.location = (2000, 250)
-links.new(add_weird.outputs['Value'], multiply_final.inputs[0])
-links.new(subtract_from_1.outputs['Value'], multiply_final.inputs[1])
-
-# =============================================================================
-# 8. Set Position (Z offset)
-# =============================================================================
-
-combine_offset = nodes.new('ShaderNodeCombineXYZ')
-combine_offset.location = (2200, 250)
-combine_offset.inputs['X'].default_value = 0.0
-combine_offset.inputs['Y'].default_value = 0.0
-links.new(multiply_final.outputs['Value'], combine_offset.inputs['Z'])
-
-set_position = nodes.new('GeometryNodeSetPosition')
-set_position.location = (2400, 0)
-links.new(last_store_node.outputs['Geometry'], set_position.inputs['Geometry'])
-links.new(combine_offset.outputs['Vector'], set_position.inputs['Offset'])
-
-# =============================================================================
-# 9. Set Shade Smooth
-# =============================================================================
-
-set_smooth = nodes.new('GeometryNodeSetShadeSmooth')
-set_smooth.location = (2600, 0)
-set_smooth.inputs['Shade Smooth'].default_value = True
-links.new(set_position.outputs['Geometry'], set_smooth.inputs['Geometry'])
-
-# Output 연결
-links.new(set_smooth.outputs['Geometry'], group_output.inputs['Geometry'])
-
-print("✅ Geometry Nodes graph created")
-
-# =============================================================================
-# 10. Material 추가 (간단한 높이 기반 색상)
-# =============================================================================
-
-material = bpy.data.materials.new(name="BiomeTerrainMaterial")
-material.use_nodes = True
-material_nodes = material.node_tree.nodes
-material_links = material.node_tree.links
-
-# 기존 노드 삭제
-material_nodes.clear()
-
-# Output
-mat_output = material_nodes.new('ShaderNodeOutputMaterial')
-mat_output.location = (400, 0)
-
-# Principled BSDF
-bsdf = material_nodes.new('ShaderNodeBsdfPrincipled')
-bsdf.location = (200, 0)
-
-# ColorRamp (높이 기반 색상)
-color_ramp = material_nodes.new('ShaderNodeValToRGB')
-color_ramp.location = (0, 0)
-color_ramp.color_ramp.elements[0].color = (0.2, 0.15, 0.1, 1.0)  # 낮은 곳: 갈색
-color_ramp.color_ramp.elements[1].color = (0.9, 0.9, 0.9, 1.0)  # 높은 곳: 흰색
-
-# Position Z
-position_mat = material_nodes.new('ShaderNodeNewGeometry')
-position_mat.location = (-400, 0)
-
-separate_xyz_mat = material_nodes.new('ShaderNodeSeparateXYZ')
-separate_xyz_mat.location = (-200, 0)
-
-material_links.new(position_mat.outputs['Position'], separate_xyz_mat.inputs['Vector'])
-material_links.new(separate_xyz_mat.outputs['Z'], color_ramp.inputs['Fac'])
-material_links.new(color_ramp.outputs['Color'], bsdf.inputs['Base Color'])
-material_links.new(bsdf.outputs['BSDF'], mat_output.inputs['Surface'])
-
-# Material 할당
-if terrain_obj.data.materials:
-    terrain_obj.data.materials[0] = material
-else:
-    terrain_obj.data.materials.append(material)
-
-print("✅ Material created and assigned")
-
-# =============================================================================
-# 11. 카메라 및 조명 추가
-# =============================================================================
-
-# 카메라
-bpy.ops.object.camera_add(location=(150, -150, 100))
-camera = bpy.context.active_object
-camera.rotation_euler = (math.radians(60), 0, math.radians(45))
-bpy.context.scene.camera = camera
-
-# 조명
-bpy.ops.object.light_add(type='SUN', location=(50, 50, 100))
-light = bpy.context.active_object
-light.data.energy = 2.0
-
-print("✅ Camera and light added")
-
-# =============================================================================
-# 12. 저장
-# =============================================================================
-
-bpy.ops.wm.save_as_mainfile(filepath=OUTPUT_BLEND)
-print(f"✅ Saved: {OUTPUT_BLEND}")
-
-print("\n" + "="*60)
-print("🎉 Biome Terrain Generation Complete!")
-print("="*60)
-print(f"Vertices: {len(mesh.vertices)}")
-print(f"Biome Parameters: {len(loaded_images)}")
-print(f"Output: {OUTPUT_BLEND}")
-print("="*60)
+except Exception as e:
+    log(f"\n❌❌❌ FATAL ERROR ❌❌❌")
+    log(f"Error: {e}")
+    log(f"\nTraceback:")
+    log(traceback.format_exc())
+    sys.exit(1)

@@ -256,6 +256,22 @@ print(f'✅ Saved: {output_blend_file}')
 # 4. 메인 실행 함수
 # =============================================================================
 
+def generate_default_terrain_params():
+    """기본 지형 파라미터 생성"""
+    return {
+        "grid_subdivisions": 200,
+        "terrain_scale": 10,  # 10배 = 1km
+        "height_multiplier": 30,
+        "z_scale": 3,
+        "noise_scale": 0.05,
+        "noise_detail": 5.0,
+        "erosion_strength": 20.0,
+        "continentalness_strength": 10.0,
+        "weirdness_strength": 5.0,
+        "temperature_influence": 0.2
+    }
+
+
 def main():
     """
     메인 실행 함수
@@ -340,26 +356,37 @@ def main():
     saved_files = save_biome_maps_as_images(biome_maps, image_dir)
     print(f"✅ {len(saved_files)}개 PNG 파일 저장 완료")
 
-    # 4. Blender 스크립트 생성
+    # 4. 지형 파라미터 JSON 생성
+    terrain_params = generate_default_terrain_params()
+    if 'terrain_params' in biome_layout:
+        terrain_params.update(biome_layout['terrain_params'])
+
+    params_file = os.path.join(output_dir, 'terrain_params.json')
+    with open(params_file, 'w', encoding='utf-8') as f:
+        json.dump(terrain_params, f, indent=2)
+
+    print(f"✅ 지형 파라미터 생성: {params_file}")
+
+    # 5. Blender 실행 명령 출력
     blend_file = os.path.join(output_dir, 'biome_terrain.blend')
-    blender_script = generate_biome_terrain_script(biome_maps, blend_file, image_dir)
+    preview_file = os.path.join(output_dir, 'preview.png')
 
-    script_path = os.path.join(output_dir, 'run_in_blender.py')
-    with open(script_path, 'w', encoding='utf-8') as f:
-        f.write(blender_script)
-
-    print(f"\n✅ Blender 스크립트 생성: {script_path}")
     print(f"\n🎯 다음 명령으로 Blender에서 실행:")
-    print(f"   blender --background --python {script_path}")
+    print(f'   blender --background --python src/blender-scripts/biome_terrain_blender.py -- "{image_dir}" "{params_file}" "{blend_file}" "{preview_file}"')
 
-    # 5. 결과 요약
+    # 6. 결과 요약
     print("\n" + "="*60)
     print("📊 생성 결과 요약")
     print("="*60)
     print(f"바이옴 포인트: {len(biome_points)}개")
     print(f"파라미터 맵: {len(biome_maps)}개 (100x100)")
     print(f"PNG 이미지: {len(saved_files)}개")
+    print(f"지형 파라미터: {params_file}")
     print(f"출력 디렉토리: {output_dir}")
+    print(f"\n지형 설정:")
+    print(f"  - 그리드: {terrain_params['grid_subdivisions']}×{terrain_params['grid_subdivisions']}")
+    print(f"  - 크기: {terrain_params['terrain_scale'] * 100}m (= {terrain_params['terrain_scale'] * 100 / 1000}km)")
+    print(f"  - 최대 높이: {terrain_params['height_multiplier'] * terrain_params['z_scale']}m")
     print("="*60)
 
 

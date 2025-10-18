@@ -46,9 +46,8 @@ blenderQueue.process(2, async (job) => {
         console.log(`[Worker] Biome terrain generated`);
         console.log(`[Worker] Image maps: ${result.imagePaths.length}`);
 
-        // TODO: Preview 이미지 생성 (현재는 스킵)
-        // 임시로 빈 파일 생성
-        fs.writeFileSync(previewPath, '');
+        // Preview 이미지는 biome_terrain_blender.py에서 이미 생성됨
+        console.log(`[Worker] Preview image created by Blender script`);
 
       } else {
         console.log(`[Worker] Standard terrain mode`);

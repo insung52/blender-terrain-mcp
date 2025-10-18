@@ -46,14 +46,25 @@ export async function generateBiomeTerrain(
   // 3. Blender에서 지형 생성 (biome_terrain_blender.py)
   const biomeBlenderScript = path.join(config.blenderScriptsDir, 'biome_terrain_blender.py');
   const imageDir = path.join(tempDir, 'biome_maps');
+  const paramsFile = path.join(tempDir, 'terrain_params.json');
+  const previewPath = outputBlendPath.replace('.blend', '_preview.png');
 
-  const blenderCommand = `"${config.blenderPath}" --background --python "${biomeBlenderScript}" -- "${imageDir}" "${outputBlendPath}"`;
+  const blenderCommand = `"${config.blenderPath}" --background --python "${biomeBlenderScript}" -- "${imageDir}" "${paramsFile}" "${outputBlendPath}" "${previewPath}"`;
 
   console.log(`🔄 Generating terrain in Blender: ${blenderCommand}`);
-  const { stdout: blenderStdout, stderr: blenderStderr } = await execAsync(blenderCommand);
+
+  // maxBuffer 증가 및 타임아웃 설정
+  const { stdout: blenderStdout, stderr: blenderStderr } = await execAsync(blenderCommand, {
+    maxBuffer: 10 * 1024 * 1024, // 10MB
+    timeout: 5 * 60 * 1000, // 5분
+  });
 
   console.log('Blender Output:', blenderStdout);
   if (blenderStderr) console.error('Blender Errors:', blenderStderr);
+
+  // Blender 프로세스 종료 후 파일 시스템 flush 대기
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  console.log('Waited 2 seconds for file system to flush');
 
   // 4. 생성된 이미지 경로 리스트
   const paramNames = [
