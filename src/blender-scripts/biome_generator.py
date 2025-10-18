@@ -82,11 +82,11 @@ def generate_biome_parameter_map(
     grid_size: int = 100
 ) -> Dict[str, np.ndarray]:
     """
-    바이옴 포인트들로부터 100x100 파라미터 맵 생성
+    바이옴 포인트들로부터 파라미터 맵 생성
 
     Args:
         biome_points: Claude AI가 생성한 바이옴 포인트 리스트
-        grid_size: 그리드 크기 (기본 100)
+        grid_size: 그리드 크기 (기본 100, terrain_scale에 따라 스케일링)
 
     Returns:
         파라미터 이름: (grid_size, grid_size) numpy 배열 딕셔너리
@@ -130,11 +130,11 @@ def normalize_parameter_to_image(param_map: np.ndarray, param_name: str) -> np.n
     파라미터 맵을 0~255 이미지 데이터로 정규화
 
     Args:
-        param_map: (100, 100) numpy 배열
+        param_map: (grid_size, grid_size) numpy 배열
         param_name: 파라미터 이름
 
     Returns:
-        (100, 100) uint8 배열 (0~255)
+        (grid_size, grid_size) uint8 배열 (0~255)
     """
     if param_name in ['temperature', 'continentalness']:
         # -1.0 ~ 1.0 → 0 ~ 255
@@ -345,9 +345,27 @@ def main():
     for i, point in enumerate(biome_points):
         print(f"  {i+1}. {point['description']} at {point['position']}")
 
-    # 2. 100x100 바이옴 파라미터 맵 생성
-    print("\n🔄 100x100 바이옴 파라미터 맵 생성 중...")
-    biome_maps = generate_biome_parameter_map(biome_points)
+    # 2. terrain_scale 로드
+    if 'terrain_params' in biome_layout:
+        terrain_scale = biome_layout['terrain_params'].get('terrain_scale', 10)
+    else:
+        terrain_scale = 10  # 기본값
+
+    # 바이옴 이미지 크기 = base_size(100) * terrain_scale
+    grid_size = 100 * terrain_scale  # 1000 for terrain_scale=10
+
+    # 바이옴 포인트 위치를 terrain_scale에 맞게 스케일링
+    scaled_biome_points = []
+    for point in biome_points:
+        scaled_point = point.copy()
+        scaled_point['position'] = [
+            point['position'][0] * terrain_scale,
+            point['position'][1] * terrain_scale
+        ]
+        scaled_biome_points.append(scaled_point)
+
+    print(f"\n🔄 {grid_size}x{grid_size} 바이옴 파라미터 맵 생성 중 (terrain_scale={terrain_scale})...")
+    biome_maps = generate_biome_parameter_map(scaled_biome_points, grid_size=grid_size)
     print(f"✅ {len(biome_maps)}개 파라미터 맵 생성 완료")
 
     # 3. 이미지로 저장
@@ -379,7 +397,7 @@ def main():
     print("📊 생성 결과 요약")
     print("="*60)
     print(f"바이옴 포인트: {len(biome_points)}개")
-    print(f"파라미터 맵: {len(biome_maps)}개 (100x100)")
+    print(f"파라미터 맵: {len(biome_maps)}개 ({grid_size}x{grid_size})")
     print(f"PNG 이미지: {len(saved_files)}개")
     print(f"지형 파라미터: {params_file}")
     print(f"출력 디렉토리: {output_dir}")

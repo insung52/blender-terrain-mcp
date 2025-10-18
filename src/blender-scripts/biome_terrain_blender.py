@@ -79,7 +79,18 @@ final_size = base_size * terrain_scale
 max_height = height_multiplier * z_scale
 
 log(f"[Biome Terrain] Grid: {grid_subdivisions}×{grid_subdivisions}")
-log(f"[Biome Terrain] Final size: {final_size}m × {final_size}m × {max_height}m")
+log(f"[Biome Terrain] Final size: {final_size}m × {final_size}m")
+log("")
+log("🔥 Height System V2:")
+log("  Phase 1: Parameter Redefinition")
+log("    - Continentalness: -1~1 → -50m~1500m (actual elevation)")
+log("    - Erosion: 0~1 → 0~400m (height variation range)")
+log("    - Temperature: removed from height (material only)")
+log("  Phase 2: Multi-Octave Noise")
+log("    - Octave 1 (50%): scale=0.01 (100m features)")
+log("    - Octave 2 (30%): scale=0.05 (20m features)")
+log("    - Octave 3 (15%): scale=0.2 (5m features)")
+log("    - Octave 4 (5%): scale=1.0 (1m details)")
 log("")
 
 # 메인 실행 (에러 캡처)
@@ -194,29 +205,31 @@ try:
     links.new(position_node.outputs["Position"], separate_xyz.inputs["Vector"])
 
     # Normalize X, Y to 0~1
-    half_size = base_size / 2.0
+    # ⚠️ IMPORTANT: final_size 사용 (terrain_scale 적용 후 크기)
+    # 스케일 적용 후 메시는 -final_size/2 ~ final_size/2 범위
+    half_final_size = final_size / 2.0
 
     add_x_node = nodes.new("ShaderNodeMath")
     add_x_node.operation = "ADD"
-    add_x_node.inputs[1].default_value = half_size
+    add_x_node.inputs[1].default_value = half_final_size
     add_x_node.location = (-400, 200)
     links.new(separate_xyz.outputs["X"], add_x_node.inputs[0])
 
     divide_x_node = nodes.new("ShaderNodeMath")
     divide_x_node.operation = "DIVIDE"
-    divide_x_node.inputs[1].default_value = base_size
+    divide_x_node.inputs[1].default_value = final_size
     divide_x_node.location = (-200, 200)
     links.new(add_x_node.outputs["Value"], divide_x_node.inputs[0])
 
     add_y_node = nodes.new("ShaderNodeMath")
     add_y_node.operation = "ADD"
-    add_y_node.inputs[1].default_value = half_size
+    add_y_node.inputs[1].default_value = half_final_size
     add_y_node.location = (-400, 0)
     links.new(separate_xyz.outputs["Y"], add_y_node.inputs[0])
 
     divide_y_node = nodes.new("ShaderNodeMath")
     divide_y_node.operation = "DIVIDE"
-    divide_y_node.inputs[1].default_value = base_size
+    divide_y_node.inputs[1].default_value = final_size
     divide_y_node.location = (-200, 0)
     links.new(add_y_node.outputs["Value"], divide_y_node.inputs[0])
 
@@ -319,45 +332,131 @@ try:
     attr_weirdness.data_type = "FLOAT"
     attr_weirdness.inputs["Name"].default_value = "weirdness"
 
-    # Noise Texture (기본)
-    noise_node = nodes.new("ShaderNodeTexNoise")
-    noise_node.location = (1000, -400)
-    noise_node.inputs["Scale"].default_value = noise_scale
-    noise_node.inputs["Detail"].default_value = noise_detail
-    links.new(position_node.outputs["Position"], noise_node.inputs["Vector"])
+    # =========================================================================
+    # Phase 2: Multi-Octave Noise System
+    # =========================================================================
+
+    # Octave 1: Large-scale features (산맥, 계곡)
+    noise_octave_1 = nodes.new("ShaderNodeTexNoise")
+    noise_octave_1.location = (1000, -200)
+    noise_octave_1.inputs["Scale"].default_value = 0.01  # 매우 큰 스케일 (100m 단위)
+    noise_octave_1.inputs["Detail"].default_value = 2.0
+    noise_octave_1.inputs["Roughness"].default_value = 0.5
+    links.new(position_node.outputs["Position"], noise_octave_1.inputs["Vector"])
+
+    # Octave 2: Medium features (개별 산봉우리)
+    noise_octave_2 = nodes.new("ShaderNodeTexNoise")
+    noise_octave_2.location = (1000, -350)
+    noise_octave_2.inputs["Scale"].default_value = 0.05  # 현재 스케일 유지 (20m 단위)
+    noise_octave_2.inputs["Detail"].default_value = 4.0
+    noise_octave_2.inputs["Roughness"].default_value = 0.6
+    links.new(position_node.outputs["Position"], noise_octave_2.inputs["Vector"])
+
+    # Octave 3: Small features (언덕, 구릉)
+    noise_octave_3 = nodes.new("ShaderNodeTexNoise")
+    noise_octave_3.location = (1000, -500)
+    noise_octave_3.inputs["Scale"].default_value = 0.2  # 작은 스케일 (5m 단위)
+    noise_octave_3.inputs["Detail"].default_value = 5.0
+    noise_octave_3.inputs["Roughness"].default_value = 0.7
+    links.new(position_node.outputs["Position"], noise_octave_3.inputs["Vector"])
+
+    # Octave 4: Micro details (바위, 표면 요철)
+    noise_octave_4 = nodes.new("ShaderNodeTexNoise")
+    noise_octave_4.location = (1000, -650)
+    noise_octave_4.inputs["Scale"].default_value = 1.0  # 매우 작은 스케일 (1m 단위)
+    noise_octave_4.inputs["Detail"].default_value = 6.0
+    noise_octave_4.inputs["Roughness"].default_value = 0.8
+    links.new(position_node.outputs["Position"], noise_octave_4.inputs["Vector"])
+
+    # Octave 1 * 0.50
+    multiply_octave_1 = nodes.new("ShaderNodeMath")
+    multiply_octave_1.operation = "MULTIPLY"
+    multiply_octave_1.inputs[1].default_value = 0.50
+    multiply_octave_1.location = (1150, -200)
+    links.new(noise_octave_1.outputs["Fac"], multiply_octave_1.inputs[0])
+
+    # Octave 2 * 0.30
+    multiply_octave_2 = nodes.new("ShaderNodeMath")
+    multiply_octave_2.operation = "MULTIPLY"
+    multiply_octave_2.inputs[1].default_value = 0.30
+    multiply_octave_2.location = (1150, -350)
+    links.new(noise_octave_2.outputs["Fac"], multiply_octave_2.inputs[0])
+
+    # Octave 3 * 0.15
+    multiply_octave_3 = nodes.new("ShaderNodeMath")
+    multiply_octave_3.operation = "MULTIPLY"
+    multiply_octave_3.inputs[1].default_value = 0.15
+    multiply_octave_3.location = (1150, -500)
+    links.new(noise_octave_3.outputs["Fac"], multiply_octave_3.inputs[0])
+
+    # Octave 4 * 0.05
+    multiply_octave_4 = nodes.new("ShaderNodeMath")
+    multiply_octave_4.operation = "MULTIPLY"
+    multiply_octave_4.inputs[1].default_value = 0.05
+    multiply_octave_4.location = (1150, -650)
+    links.new(noise_octave_4.outputs["Fac"], multiply_octave_4.inputs[0])
+
+    # Add Octave 1 + 2
+    add_octave_12 = nodes.new("ShaderNodeMath")
+    add_octave_12.operation = "ADD"
+    add_octave_12.location = (1300, -275)
+    links.new(multiply_octave_1.outputs["Value"], add_octave_12.inputs[0])
+    links.new(multiply_octave_2.outputs["Value"], add_octave_12.inputs[1])
+
+    # Add Octave 3 + 4
+    add_octave_34 = nodes.new("ShaderNodeMath")
+    add_octave_34.operation = "ADD"
+    add_octave_34.location = (1300, -575)
+    links.new(multiply_octave_3.outputs["Value"], add_octave_34.inputs[0])
+    links.new(multiply_octave_4.outputs["Value"], add_octave_34.inputs[1])
+
+    # Combined Noise = Octave 1+2+3+4
+    combined_noise = nodes.new("ShaderNodeMath")
+    combined_noise.operation = "ADD"
+    combined_noise.location = (1450, -400)
+    links.new(add_octave_12.outputs["Value"], combined_noise.inputs[0])
+    links.new(add_octave_34.outputs["Value"], combined_noise.inputs[1])
 
     # Noise Texture (weirdness용)
     noise_weird = nodes.new("ShaderNodeTexNoise")
-    noise_weird.location = (1000, -600)
-    noise_weird.inputs["Scale"].default_value = noise_scale * 4.0
-    noise_weird.inputs["Detail"].default_value = max(1.0, noise_detail - 2.0)
+    noise_weird.location = (1000, -800)
+    noise_weird.inputs["Scale"].default_value = 0.1
+    noise_weird.inputs["Detail"].default_value = 3.0
     links.new(position_node.outputs["Position"], noise_weird.inputs["Vector"])
 
-    # Height = Noise * erosion * erosion_strength
+    # =========================================================================
+    # Phase 1 개선: Continentalness → 실제 고도, Erosion → 변동폭
+    # =========================================================================
+
+    # STEP 1: Continentalness를 실제 해발고도로 변환
+    # -1~1 → -50m~1500m (스케일 조정: 3000m→1500m)
+    map_continentalness = nodes.new("ShaderNodeMapRange")
+    map_continentalness.location = (1200, 0)
+    map_continentalness.inputs["From Min"].default_value = -1.0
+    map_continentalness.inputs["From Max"].default_value = 1.0
+    map_continentalness.inputs["To Min"].default_value = -50.0
+    map_continentalness.inputs["To Max"].default_value = 1500.0
+    links.new(attr_continentalness.outputs["Attribute"], map_continentalness.inputs["Value"])
+
+    # STEP 2: Erosion을 높이 변동 범위로 변환
+    # 0~1 → 0~400m (스케일 조정: 800m→400m)
+    map_erosion = nodes.new("ShaderNodeMapRange")
+    map_erosion.location = (1200, 200)
+    map_erosion.inputs["From Min"].default_value = 0.0
+    map_erosion.inputs["From Max"].default_value = 1.0
+    map_erosion.inputs["To Min"].default_value = 0.0
+    map_erosion.inputs["To Max"].default_value = 400.0
+    links.new(attr_erosion.outputs["Attribute"], map_erosion.inputs["Value"])
+
+    # STEP 3: Combined Multi-Octave Noise와 Erosion 범위를 곱셈
+    # height_variation = combined_noise * erosion_range
     multiply_noise_erosion = nodes.new("ShaderNodeMath")
     multiply_noise_erosion.operation = "MULTIPLY"
-    multiply_noise_erosion.location = (1200, 200)
-    links.new(noise_node.outputs["Fac"], multiply_noise_erosion.inputs[0])
-    links.new(attr_erosion.outputs["Attribute"], multiply_noise_erosion.inputs[1])
+    multiply_noise_erosion.location = (1600, 200)
+    links.new(combined_noise.outputs["Value"], multiply_noise_erosion.inputs[0])
+    links.new(map_erosion.outputs["Result"], multiply_noise_erosion.inputs[1])
 
-    multiply_erosion_strength = nodes.new("ShaderNodeMath")
-    multiply_erosion_strength.operation = "MULTIPLY"
-    multiply_erosion_strength.inputs[1].default_value = erosion_strength
-    multiply_erosion_strength.location = (1400, 200)
-    links.new(
-        multiply_noise_erosion.outputs["Value"], multiply_erosion_strength.inputs[0]
-    )
-
-    # continentalness * continentalness_strength
-    multiply_cont_strength = nodes.new("ShaderNodeMath")
-    multiply_cont_strength.operation = "MULTIPLY"
-    multiply_cont_strength.inputs[1].default_value = continentalness_strength
-    multiply_cont_strength.location = (1200, 0)
-    links.new(
-        attr_continentalness.outputs["Attribute"], multiply_cont_strength.inputs[0]
-    )
-
-    # weirdness * Noise * weirdness_strength
+    # STEP 4: Weirdness 효과 (기존 유지, 나중에 Phase 3에서 개선)
     multiply_weird_noise = nodes.new("ShaderNodeMath")
     multiply_weird_noise.operation = "MULTIPLY"
     multiply_weird_noise.location = (1200, -200)
@@ -372,51 +471,40 @@ try:
         multiply_weird_noise.outputs["Value"], multiply_weirdness_strength.inputs[0]
     )
 
-    # Height += continentalness
-    add_cont = nodes.new("ShaderNodeMath")
-    add_cont.operation = "ADD"
-    add_cont.location = (1600, 100)
-    links.new(multiply_erosion_strength.outputs["Value"], add_cont.inputs[0])
-    links.new(multiply_cont_strength.outputs["Value"], add_cont.inputs[1])
+    # STEP 5: 최종 높이 합성
+    # final_height = base_height (continentalness) + height_variation (noise * erosion) + weirdness
 
-    # Height += weirdness
-    add_weird = nodes.new("ShaderNodeMath")
-    add_weird.operation = "ADD"
-    add_weird.location = (1800, 100)
-    links.new(add_cont.outputs["Value"], add_weird.inputs[0])
-    links.new(multiply_weirdness_strength.outputs["Value"], add_weird.inputs[1])
+    # base_height + height_variation
+    add_base_variation = nodes.new("ShaderNodeMath")
+    add_base_variation.operation = "ADD"
+    add_base_variation.location = (1600, 100)
+    links.new(map_continentalness.outputs["Result"], add_base_variation.inputs[0])
+    links.new(multiply_noise_erosion.outputs["Value"], add_base_variation.inputs[1])
 
-    # Height *= (1.0 - temperature * temperature_influence)
-    multiply_temp_influence = nodes.new("ShaderNodeMath")
-    multiply_temp_influence.operation = "MULTIPLY"
-    multiply_temp_influence.inputs[1].default_value = temperature_influence
-    multiply_temp_influence.location = (1600, 400)
-    links.new(attr_temp.outputs["Attribute"], multiply_temp_influence.inputs[0])
+    # + weirdness
+    add_weirdness = nodes.new("ShaderNodeMath")
+    add_weirdness.operation = "ADD"
+    add_weirdness.location = (1800, 100)
+    links.new(add_base_variation.outputs["Value"], add_weirdness.inputs[0])
+    links.new(multiply_weirdness_strength.outputs["Value"], add_weirdness.inputs[1])
 
-    subtract_from_1 = nodes.new("ShaderNodeMath")
-    subtract_from_1.operation = "SUBTRACT"
-    subtract_from_1.inputs[0].default_value = 1.0
-    subtract_from_1.location = (1800, 400)
-    links.new(multiply_temp_influence.outputs["Value"], subtract_from_1.inputs[1])
-
-    multiply_final = nodes.new("ShaderNodeMath")
-    multiply_final.operation = "MULTIPLY"
-    multiply_final.location = (2000, 250)
-    links.new(add_weird.outputs["Value"], multiply_final.inputs[0])
-    links.new(subtract_from_1.outputs["Value"], multiply_final.inputs[1])
+    # ⚠️ Phase 1.3: Temperature는 높이 계산에서 제거!
+    # Temperature는 Material에서만 사용 (눈선 계산)
+    # 최종 높이 = add_weirdness 결과
+    final_height = add_weirdness
 
     # =============================================================================
     # 8. Set Position (Z offset)
     # =============================================================================
 
     combine_offset = nodes.new("ShaderNodeCombineXYZ")
-    combine_offset.location = (2200, 250)
+    combine_offset.location = (2000, 100)
     combine_offset.inputs["X"].default_value = 0.0
     combine_offset.inputs["Y"].default_value = 0.0
-    links.new(multiply_final.outputs["Value"], combine_offset.inputs["Z"])
+    links.new(final_height.outputs["Value"], combine_offset.inputs["Z"])
 
     set_position = nodes.new("GeometryNodeSetPosition")
-    set_position.location = (2400, 0)
+    set_position.location = (2200, 0)
     links.new(last_store_node.outputs["Geometry"], set_position.inputs["Geometry"])
     links.new(combine_offset.outputs["Vector"], set_position.inputs["Offset"])
 

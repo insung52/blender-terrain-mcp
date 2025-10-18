@@ -1125,7 +1125,646 @@ create_vertex_attribute(mesh, 'weirdness', weirdness_map)
 
 ---
 
-## 10. 결정 필요 사항
+## 10. 지형 높이 생성 시스템 업그레이드 🔥
+
+### 10.1 현재 문제점 분석
+
+**현재 상황 (V1 구현):**
+```
+입력: "왼쪽에는 아주 크고 높은 산, 오른쪽에는 평지"
+결과:
+  - 예상 최대 높이: 90m (height_multiplier=30 * z_scale=3)
+  - 실제 최대 높이: 13.3m
+  - 문제: 높이가 예상의 15% 수준
+```
+
+**원인:**
+1. **파라미터 범위 부적절**
+   - `continentalness`: -1~1 (추상적, 높이와 무관)
+   - `erosion`: 0~1 (노이즈 곱셈용, 실제 높이 아님)
+   - 현재 공식: `height = noise * erosion * 20 + continentalness * 10`
+   - 결과: 최대 ~30m 정도만 생성
+
+2. **Noise 의존도 과다**
+   - 현재는 Noise가 주 높이 생성원
+   - 바이옴 파라미터는 단순 곱셈/덧셈만
+   - Z축 스케일 증가 → "자성유체 가시" 현상 (노이즈 패턴 증폭)
+
+3. **해상도 부족**
+   - 200×200 그리드 (40,401 vertices)
+   - 1000m 지형: 5m/vertex
+   - 큰 산맥 표현에는 디테일 부족
+
+---
+
+### 10.2 종합 개선 계획
+
+#### **핵심 설계 원칙**
+
+1. **바이옴 파라미터가 실제 높이 제어** (노이즈는 디테일만)
+2. **다층 노이즈로 자연스러운 디테일**
+3. **Subdivision으로 충분한 해상도**
+4. **LOD로 성능 최적화**
+
+---
+
+### 10.3 Phase 1: 바이옴 파라미터 재정의 ⭐⭐⭐ (최우선)
+
+#### 1.1 Continentalness → 실제 고도
+
+**현재 (V1):**
+```typescript
+continentalness: -1.0 ~ 1.0  // 추상적 값
+공식: height += continentalness * 10.0  // 최대 ±10m
+```
+
+**개선 (V2):**
+```typescript
+continentalness: -1.0 ~ 1.0  // 유지 (블렌딩 위해)
+해석: -1.0 = 해저(-100m), 0.0 = 해수면, 1.0 = 고지대(3000m)
+
+Map Range in Geometry Nodes:
+  Input: -1.0 ~ 1.0 (바이옴 파라미터)
+  Output: -100m ~ 3000m (실제 해발고도)
+
+공식: base_height = map_range(continentalness, -1~1, -100~3000)
+```
+
+**효과:**
+- 산악 바이옴 (continentalness=0.8): base_height ≈ 2500m
+- 평지 바이옴 (continentalness=0.3): base_height ≈ 1000m
+- 호수 바이옴 (continentalness=-0.8): base_height ≈ -50m
+
+#### 1.2 Erosion → 높이 변동폭
+
+**현재 (V1):**
+```typescript
+erosion: 0.0 ~ 1.0
+공식: height = noise * erosion * 20.0  // 최대 20m 변동
+```
+
+**개선 (V2):**
+```typescript
+erosion: 0.0 ~ 1.0  // 유지
+해석: 높이 기복의 크기 (0 = 완전 평평, 1 = 극심한 기복)
+
+Map Range:
+  Input: 0.0 ~ 1.0
+  Output: 0m ~ 800m (최대 변동폭)
+
+공식: height_variation = multi_octave_noise * map_range(erosion, 0~1, 0~800)
+```
+
+**효과:**
+- 평지 (erosion=0.1): ±40m 변동 (완만한 언덕)
+- 산악 (erosion=0.8): ±640m 변동 (봉우리/계곡)
+- 호수 (erosion=0.0): 0m 변동 (완전 평평)
+
+#### 1.3 최종 높이 공식
+
+```python
+# Geometry Nodes 공식
+base_height = map_range(continentalness, -1~1, -100~3000)  # 기본 고도
+variation_range = map_range(erosion, 0~1, 0~800)           # 변동 범위
+
+# Multi-octave noise (Section 10.4 참조)
+noise_value = (
+    noise_octave_1 * 0.50 +  # Large features (scale=0.01)
+    noise_octave_2 * 0.30 +  # Medium features (scale=0.05)
+    noise_octave_3 * 0.15 +  # Small features (scale=0.2)
+    noise_octave_4 * 0.05    # Micro details (scale=1.0)
+)  # noise_value: -1.0 ~ 1.0
+
+height_variation = noise_value * variation_range
+
+# Temperature 영향 (낮은 온도 = 눈 덮임, 높이는 그대로)
+# V2에서는 Material만 영향, 높이는 무관
+
+final_height = base_height + height_variation
+```
+
+**결과:**
+```
+산악 바이옴 (continentalness=0.8, erosion=0.8):
+  base_height = 2500m
+  variation_range = 640m
+  final_height = 2500m ± 640m = 1860~3140m ✅
+
+평지 바이옴 (continentalness=0.3, erosion=0.1):
+  base_height = 1000m
+  variation_range = 40m
+  final_height = 1000m ± 40m = 960~1040m ✅
+
+호수 바이옴 (continentalness=-0.5, erosion=0.0):
+  base_height = -25m
+  variation_range = 0m
+  final_height = -25m (완전 평평) ✅
+```
+
+---
+
+### 10.4 Phase 2: Multi-Octave Noise 시스템 ⭐⭐
+
+**현재 (V1):** 단일 Noise
+```python
+noise = noise_texture(scale=0.05, detail=5.0)
+height = noise * erosion * 20.0
+```
+
+**개선 (V2):** 4단계 Octave Noise
+```python
+# Octave 1: Large-scale features (산맥, 계곡)
+noise_1 = noise_texture(
+    position=vertex_position,
+    scale=0.01,      # 매우 큰 스케일 (100m 단위)
+    detail=2.0,
+    roughness=0.5
+)
+
+# Octave 2: Medium features (개별 산봉우리)
+noise_2 = noise_texture(
+    position=vertex_position,
+    scale=0.05,      # 현재 스케일 유지 (20m 단위)
+    detail=4.0,
+    roughness=0.6
+)
+
+# Octave 3: Small features (언덕, 구릉)
+noise_3 = noise_texture(
+    position=vertex_position,
+    scale=0.2,       # 작은 스케일 (5m 단위)
+    detail=5.0,
+    roughness=0.7
+)
+
+# Octave 4: Micro details (바위, 표면 요철)
+noise_4 = noise_texture(
+    position=vertex_position,
+    scale=1.0,       # 매우 작은 스케일 (1m 단위)
+    detail=6.0,
+    roughness=0.8
+)
+
+# 가중 합성
+combined_noise = (
+    noise_1 * 0.50 +  # 50% - 전체적인 형태
+    noise_2 * 0.30 +  # 30% - 중간 디테일
+    noise_3 * 0.15 +  # 15% - 작은 디테일
+    noise_4 * 0.05    # 5% - 미세 디테일
+)
+```
+
+**효과:**
+- ✅ 자연스러운 지형 계층 구조
+- ✅ Z축 스케일 증가해도 가시 현상 없음 (여러 주파수 혼합)
+- ✅ 멀리서: 큰 산맥 형태 보임
+- ✅ 가까이서: 작은 바위 디테일 보임
+
+---
+
+### 10.5 Phase 3: Weirdness 특수 지형 ⭐
+
+**현재 (V1):** 단순 노이즈 곱셈
+```python
+height += weirdness * noise * 5.0
+```
+
+**개선 (V2):** 특수 지형 생성기
+
+#### 3.1 Weirdness 범위별 효과
+
+```python
+if weirdness < 0.3:
+    # 일반 지형 (현재와 동일)
+    pass
+
+elif 0.3 <= weirdness < 0.7:
+    # 절벽/협곡 생성
+    voronoi = voronoi_texture(scale=0.1, feature='DISTANCE')
+
+    # Voronoi Distance를 절벽으로 변환
+    # Distance가 0.5 근처일 때 = 셀 경계 = 절벽
+    cliff_mask = 1.0 - abs(voronoi.distance - 0.5) * 2.0
+    cliff_height = cliff_mask * 200.0  # 200m 절벽
+
+    height += cliff_height * (weirdness - 0.3) / 0.4
+
+else:  # weirdness >= 0.7
+    # 메사/기둥 지형 (미국 서부 협곡 스타일)
+    voronoi = voronoi_texture(scale=0.05, feature='DISTANCE')
+
+    # Quantize로 층층이 쌓인 지형
+    quantized = floor(height / 50.0) * 50.0  # 50m 단위 계단
+
+    # 기둥 마스크
+    pillar_mask = step(voronoi.distance, 0.3)  # 중심 30%만
+
+    height = mix(height, quantized, (weirdness - 0.7) / 0.3)
+    height *= pillar_mask  # 기둥만 남김
+```
+
+**결과:**
+- `weirdness=0.1`: 평범한 산
+- `weirdness=0.5`: 절벽과 협곡이 섞인 험준한 지형
+- `weirdness=0.9`: 메사(탁자산), 기둥 지형 (그랜드 캐니언 스타일)
+
+---
+
+### 10.6 Phase 4: Subdivision & Adaptive LOD ⭐⭐
+
+#### 4.1 현재 문제
+```
+200×200 grid = 40,401 vertices
+1000m terrain = 5m/vertex
+→ 큰 산맥 표현에 디테일 부족
+```
+
+#### 4.2 해결책: Subdivision + Multires
+
+**방법 A: Subdivision Surface Modifier** (간단)
+```python
+# Geometry Nodes 적용 후 Subdivision 추가
+modifier = terrain_obj.modifiers.new(name="Subdivision", type='SUBSURF')
+modifier.levels = 1           # Viewport: 1단계 (160K vertices)
+modifier.render_levels = 2    # Render: 2단계 (640K vertices)
+modifier.subdivision_type = 'CATMULL_CLARK'
+```
+
+**결과:**
+- Viewport: 400×400 ≈ 160K vertices (2.5m/vertex)
+- Render: 800×800 ≈ 640K vertices (1.25m/vertex)
+- ✅ 충분한 디테일
+- ⚠️ 메모리: ~25MB (viewport), ~100MB (render)
+
+**방법 B: Multiresolution Modifier** (더 좋음)
+```python
+# 1. Geometry Nodes 적용
+# 2. Modifier Apply (메시로 변환)
+# 3. Multires 추가
+modifier = terrain_obj.modifiers.new(name="Multires", type='MULTIRES')
+modifier.levels = 3  # 3단계 subdivision
+
+# 4. Sculpt Mode에서 Displace Brush로 추가 디테일
+#    또는 Geometry Nodes로 Displacement 추가
+```
+
+**장점:**
+- ✅ LOD 자동 지원 (멀리: 낮은 레벨, 가까이: 높은 레벨)
+- ✅ Sculpting 가능 (수동 조정)
+- ✅ 메모리 효율적 (필요시만 세분화)
+
+#### 4.3 Adaptive Subdivision (Geometry Nodes)
+
+**개념:** 경사진 곳만 세분화
+```
+평지: 5m/vertex (충분)
+산악: 1m/vertex (높은 해상도)
+```
+
+**구현:**
+```python
+# Geometry Nodes
+slope = calculate_slope(mesh)  # Section 8 참조
+
+# Subdivide conditionally
+if slope > 0.5:  # 경사 > 45°
+    subdivide_mesh(level=2)  # 4배 증가
+elif slope > 0.3:
+    subdivide_mesh(level=1)  # 2배 증가
+else:
+    pass  # 원본 해상도
+```
+
+**결과:**
+- 평지: 200×200 유지
+- 산악: 800×800 자동 증가
+- ✅ 메모리 효율 + 디테일
+
+---
+
+### 10.7 Phase 5: Ridge & Valley 지형 특징 ⭐
+
+#### 5.1 Ridge (산맥) 생성
+
+**개념:** Voronoi Distance를 이용한 능선
+```python
+voronoi = voronoi_texture(scale=0.03, feature='DISTANCE')
+
+# Distance 0.5 = 셀 경계 = 산맥 능선
+ridge_mask = 1.0 - abs(voronoi.distance - 0.5) * 2.0
+ridge_mask = clamp(ridge_mask, 0, 1)
+
+# 뾰족한 능선 효과
+ridge_mask = pow(ridge_mask, 2.0)  # Sharpen
+
+# 산맥 높이 추가 (erosion 높은 곳만)
+ridge_height = ridge_mask * 300.0 * erosion
+height += ridge_height
+```
+
+**효과:**
+- ✅ 히말라야/안데스 스타일 산맥
+- ✅ 뾰족한 봉우리
+- ✅ 자연스러운 능선 배치
+
+#### 5.2 Valley (계곡) 침식
+
+**개념:** Continentalness 낮은 곳 추가 침식
+```python
+# 강/계곡 마스크
+valley_mask = 1.0 - continentalness  # -1~1 → 2~0
+
+# 습도 높은 곳 = 물 흐름 = 침식 강화
+valley_strength = humidity * 100.0
+
+# 계곡 깊이 추가
+valley_depth = valley_mask * valley_strength
+height -= valley_depth
+```
+
+**효과:**
+- ✅ 자연스러운 강 계곡
+- ✅ 습한 지역에 깊은 협곡
+- ✅ 건조한 지역은 계곡 얕음
+
+---
+
+### 10.8 Phase 6: Temperature 영향 재설계 ⭐
+
+#### 현재 문제 (V1)
+```python
+height *= (1.0 - temperature * 0.2)
+```
+- ❌ 온도 높으면 산도 낮아짐 (비현실적)
+- ❌ 사막에 큰 산 불가능
+
+#### 개선 (V2): Temperature는 Material만 영향
+
+**Geometry Nodes (높이 계산):**
+```python
+# Temperature는 높이 계산에서 제거!
+final_height = base_height + height_variation + ridge + valley
+```
+
+**Shader Nodes (Material):**
+```python
+# 1. 눈선(Snowline) 계산
+snowline_height = map_range(
+    temperature,
+    -1.0 ~ 1.0,
+    500m ~ 4000m  # 추운 곳: 낮은 곳부터 눈
+                  # 더운 곳: 높은 곳만 눈
+)
+
+# 2. 현재 높이와 비교
+snow_mask = step(vertex_height, snowline_height)
+
+# 3. Material 믹스
+final_color = mix(
+    ground_color,  # 아래: 땅
+    snow_white,    # 위: 눈
+    snow_mask
+)
+```
+
+**효과:**
+- ✅ 사막에도 3000m 산 가능 (높이는 erosion/continentalness만 결정)
+- ✅ 온도에 따라 눈선만 변화
+  - 추운 산악: 1000m부터 눈
+  - 더운 사막 산: 3500m부터 눈
+
+---
+
+### 10.9 Phase 7: Displacement Texture (추가 디테일)
+
+#### 개념
+현재 바이옴 이미지(1000×1000)를 Displacement로 활용
+
+```python
+# Geometry Nodes
+displacement_img = image_texture('biome_erosion.png')
+
+# Erosion 이미지를 높이 디테일로 사용
+micro_displacement = (displacement_img - 0.5) * 50.0  # ±25m
+
+final_height += micro_displacement
+```
+
+**효과:**
+- ✅ 1000×1000 바이옴 이미지 = 1m 해상도 디테일
+- ✅ Noise보다 더 제어 가능
+- ✅ 바이옴 경계를 따라 디테일 변화
+
+---
+
+### 10.10 최종 구현 우선순위 & 알고리즘
+
+#### **개발 순서 (Critical Path)**
+
+```
+[최우선 - 즉시 효과]
+Phase 1.1: Continentalness 재정의 (1일)
+  → base_height = map_range(-1~1, -100~3000)
+Phase 1.2: Erosion 재정의 (1일)
+  → variation = noise * map_range(0~1, 0~800)
+
+[단기 - 빠른 효과]
+Phase 2: Multi-Octave Noise (2일)
+  → 4단계 Octave 합성
+Phase 4.1: Subdivision Surface (1일)
+  → 단순 Modifier 추가 (levels=1/2)
+
+[중기 - 품질 향상]
+Phase 5.1: Ridge 생성 (2일)
+  → Voronoi 기반 산맥
+Phase 5.2: Valley 침식 (1일)
+  → Continentalness/Humidity 기반
+Phase 6: Temperature 재설계 (2일)
+  → Material만 영향, 높이 무관
+
+[장기 - 고급 기능]
+Phase 3: Weirdness 특수 지형 (3일)
+  → 절벽/메사/기둥
+Phase 4.2: Multires/Adaptive LOD (3일)
+  → 경사 기반 세분화
+Phase 7: Displacement Texture (2일)
+  → 바이옴 이미지 활용
+
+[최적화]
+Phase 4.3: LOD 시스템 (5일)
+  → 거리 기반 해상도 조정
+```
+
+---
+
+### 10.11 최종 Geometry Nodes 알고리즘 (V2 완전판)
+
+```python
+# ===== INPUT =====
+Input Mesh (200×200 grid)
+Position Node
+Biome Images (13개 PNG) 또는 Attributes
+
+# ===== STEP 1: 바이옴 파라미터 로드 =====
+temperature = sample_image('biome_temperature.png', UV)
+humidity = sample_image('biome_humidity.png', UV)
+erosion = sample_image('biome_erosion.png', UV)
+continentalness = sample_image('biome_continentalness.png', UV)
+weirdness = sample_image('biome_weirdness.png', UV)
+
+# ===== STEP 2: 기본 고도 계산 =====
+base_height = map_range(
+    continentalness,
+    from_min=-1.0, from_max=1.0,
+    to_min=-100.0, to_max=3000.0
+)
+
+# ===== STEP 3: 변동 범위 계산 =====
+variation_range = map_range(
+    erosion,
+    from_min=0.0, from_max=1.0,
+    to_min=0.0, to_max=800.0
+)
+
+# ===== STEP 4: Multi-Octave Noise =====
+noise_1 = noise_texture(position, scale=0.01, detail=2.0) * 0.50
+noise_2 = noise_texture(position, scale=0.05, detail=4.0) * 0.30
+noise_3 = noise_texture(position, scale=0.2, detail=5.0) * 0.15
+noise_4 = noise_texture(position, scale=1.0, detail=6.0) * 0.05
+combined_noise = noise_1 + noise_2 + noise_3 + noise_4
+
+# ===== STEP 5: 높이 변동 적용 =====
+height_variation = combined_noise * variation_range
+
+# ===== STEP 6: Ridge (산맥) 추가 =====
+voronoi = voronoi_texture(position, scale=0.03, feature='DISTANCE')
+ridge_mask = 1.0 - abs(voronoi.distance - 0.5) * 2.0
+ridge_mask = clamp(ridge_mask, 0, 1) ** 2.0  # Sharpen
+ridge_height = ridge_mask * 300.0 * erosion
+
+# ===== STEP 7: Valley (계곡) 침식 =====
+valley_mask = (1.0 - continentalness) / 2.0  # 0~1
+valley_strength = humidity * 100.0
+valley_depth = valley_mask * valley_strength
+
+# ===== STEP 8: Weirdness 특수 지형 =====
+if weirdness >= 0.7:
+    # Mesa/Pillar
+    quantized = floor(height / 50.0) * 50.0
+    height = mix(height, quantized, (weirdness - 0.7) / 0.3)
+elif weirdness >= 0.3:
+    # Cliff/Canyon
+    cliff_height = cliff_function(voronoi) * (weirdness - 0.3) / 0.4
+    height += cliff_height
+
+# ===== STEP 9: 최종 높이 합성 =====
+final_height = (
+    base_height +
+    height_variation +
+    ridge_height -
+    valley_depth
+)
+
+# ===== STEP 10: Set Position =====
+offset = vector(0, 0, final_height)
+set_position(geometry, offset)
+
+# ===== STEP 11: Subdivision =====
+# (Modifier로 처리, 또는 Geometry Nodes Subdivide)
+
+# ===== STEP 12: Shade Smooth =====
+set_shade_smooth(geometry)
+
+# ===== OUTPUT =====
+Output Mesh
+```
+
+---
+
+### 10.12 예상 결과
+
+**입력:**
+```
+"왼쪽에는 아주 크고 높은 산, 오른쪽에는 평지"
+```
+
+**Claude 바이옴 포인트:**
+```json
+{
+  "left": {
+    "continentalness": 0.9,   // 고지대
+    "erosion": 0.9,            // 극심한 기복
+    "weirdness": 0.4           // 약간 특이 (절벽)
+  },
+  "right": {
+    "continentalness": 0.2,   // 저지대
+    "erosion": 0.1,            // 평평
+    "weirdness": 0.0           // 일반
+  }
+}
+```
+
+**최종 높이 (V2):**
+```
+왼쪽 산 (continentalness=0.9, erosion=0.9):
+  base_height = 2800m
+  variation = ±720m
+  ridge = +270m
+  final: 2350~3790m ✅ (극적인 산맥!)
+
+오른쪽 평지 (continentalness=0.2, erosion=0.1):
+  base_height = 800m
+  variation = ±80m
+  ridge = +30m
+  final: 750~910m ✅ (완만한 평지)
+
+높이 차이: ~3000m ✅ (실제 "아주 크고 높은 산" 느낌!)
+```
+
+---
+
+### 10.13 성능 고려사항
+
+#### 메모리
+```
+Base Mesh (200×200): 40K vertices ≈ 2MB
+Subdivision (400×400): 160K vertices ≈ 8MB (viewport)
+Subdivision (800×800): 640K vertices ≈ 32MB (render)
+Biome Images (13개 × 1000×1000): ≈ 13MB
+
+Total (viewport): ~25MB ✅ 괜찮음
+Total (render): ~50MB ✅ 괜찮음
+```
+
+#### 렌더 시간
+```
+EEVEE_NEXT (GPU):
+  - 200×200: ~1초
+  - 800×800: ~5초
+
+CYCLES (CPU):
+  - 200×200: ~30초
+  - 800×800: ~2분
+
+추천: EEVEE_NEXT (현재 사용 중) ✅
+```
+
+#### 실시간 LOD (Phase 6)
+```python
+# Geometry Nodes - Distance-based LOD
+camera_distance = distance(camera.location, vertex.position)
+
+if camera_distance > 500m:
+    subdivision_level = 0  # 원본
+elif camera_distance > 100m:
+    subdivision_level = 1  # 2배
+else:
+    subdivision_level = 2  # 4배
+```
+
+---
+
+## 11. 결정 필요 사항
 
 1. **바이옴 포인트 개수:** 최대 개수? (추천: 3~10개)
 2. **좌표 해상도:** 1m x 1m 확정? (추천: 유지)
@@ -1133,3 +1772,5 @@ create_vertex_attribute(mesh, 'weirdness', weirdness_map)
 4. **블렌딩 거리:** Perlin Noise 스케일? (추천: 0.1)
 5. **UI 방식:** 자연어만? 바이옴 포인트 수동 추가?
 6. **구현 방식:** 방법 1 (Image) vs 방법 2 (Attribute) vs 혼합? (추천: V1은 방법 1)
+7. **Subdivision 레벨:** Viewport/Render 각각? (추천: 1/2)
+8. **최대 지형 높이:** 3000m? 5000m? (추천: 3000m, 에베레스트급은 5000m)
