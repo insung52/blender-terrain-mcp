@@ -33,8 +33,8 @@ export async function generateBiomeTerrain(
   const biomeLayoutPath = path.join(tempDir, 'biome_layout.json');
   await writeFile(biomeLayoutPath, JSON.stringify(biomeLayout, null, 2));
 
-  // 2. Python 스크립트 실행 (biome_generator.py)
-  const biomeGeneratorScript = path.join(config.blenderScriptsDir, 'biome_generator.py');
+  // 2. Python 스크립트 실행 (biome_generator_wvd.py)
+  const biomeGeneratorScript = path.join(config.blenderScriptsDir, 'biome_generator_wvd.py');
   const pythonCommand = `python "${biomeGeneratorScript}" "${biomeLayoutPath}" "${tempDir}"`;
 
   console.log(`🔄 Generating biome maps: ${pythonCommand}`);

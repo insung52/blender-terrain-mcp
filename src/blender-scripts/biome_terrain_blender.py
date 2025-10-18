@@ -108,11 +108,8 @@ log("    - Temperature: -1~1 → Snowline: 500m~4000m")
 log("    - Cold regions: snow from 500m altitude")
 log("    - Hot regions: snow only above 4000m")
 log("    - Smooth transition zone ±50m")
-log("  Phase 7: UV Distortion (Minecraft-style Irregular Boundaries)")
-log("    - Multi-scale noise distortion on UV coordinates")
-log("    - Large distortion: ±5% (±50m for 1000m terrain)")
-log("    - Medium distortion: ±3% (±30m)")
-log("    - Result: Smooth irregular biome edges, spike prevention")
+log("")
+log("⚠️  UV Distortion removed - already applied in biome map generation")
 log("")
 
 # 메인 실행 (에러 캡처)
@@ -255,121 +252,15 @@ try:
     divide_y_node.location = (-200, 0)
     links.new(add_y_node.outputs["Value"], divide_y_node.inputs[0])
 
-    # Combine XY for UV (base)
+    # Combine XY for UV
     combine_xy = nodes.new("ShaderNodeCombineXYZ")
     combine_xy.location = (0, 100)
     links.new(divide_x_node.outputs["Value"], combine_xy.inputs["X"])
     links.new(divide_y_node.outputs["Value"], combine_xy.inputs["Y"])
 
-    # =============================================================================
-    # 5.5. UV Distortion for Irregular Biome Boundaries (Minecraft-style!)
-    # =============================================================================
-    # 🔥 Multi-scale noise distortion for jagged, irregular biome edges
-
-    # Large-scale distortion (산맥/계곡 스케일 변형)
-    noise_distort_large = nodes.new("ShaderNodeTexNoise")
-    noise_distort_large.location = (50, -200)
-    noise_distort_large.inputs["Scale"].default_value = 0.02  # 큰 스케일 (50m 변형)
-    noise_distort_large.inputs["Detail"].default_value = 3.0
-    noise_distort_large.inputs["Roughness"].default_value = 0.6
-    links.new(position_node.outputs["Position"], noise_distort_large.inputs["Vector"])
-
-    # Medium-scale distortion (언덕 스케일 변형)
-    noise_distort_medium = nodes.new("ShaderNodeTexNoise")
-    noise_distort_medium.location = (50, -400)
-    noise_distort_medium.inputs["Scale"].default_value = 0.1  # 중간 스케일 (10m 변형)
-    noise_distort_medium.inputs["Detail"].default_value = 4.0
-    noise_distort_medium.inputs["Roughness"].default_value = 0.7
-    links.new(position_node.outputs["Position"], noise_distort_medium.inputs["Vector"])
-
-    # Separate noise into X/Y offsets (Large)
-    separate_noise_large = nodes.new("ShaderNodeSeparateXYZ")
-    separate_noise_large.location = (250, -200)
-    links.new(
-        noise_distort_large.outputs["Color"], separate_noise_large.inputs["Vector"]
-    )
-
-    # Separate noise into X/Y offsets (Medium)
-    separate_noise_medium = nodes.new("ShaderNodeSeparateXYZ")
-    separate_noise_medium.location = (250, -400)
-    links.new(
-        noise_distort_medium.outputs["Color"], separate_noise_medium.inputs["Vector"]
-    )
-
-    # Remap noise: 0~1 → -0.05~0.05 (Large: ±5% UV distortion = ±50m for 1000m terrain)
-    # 🔧 Reduced from ±15% to ±5% to prevent terrain spikes
-    remap_noise_x_large = nodes.new("ShaderNodeMapRange")
-    remap_noise_x_large.location = (450, -150)
-    remap_noise_x_large.inputs["From Min"].default_value = 0.0
-    remap_noise_x_large.inputs["From Max"].default_value = 1.0
-    remap_noise_x_large.inputs["To Min"].default_value = -0.05
-    remap_noise_x_large.inputs["To Max"].default_value = 0.05
-    links.new(separate_noise_large.outputs["X"], remap_noise_x_large.inputs["Value"])
-
-    remap_noise_y_large = nodes.new("ShaderNodeMapRange")
-    remap_noise_y_large.location = (450, -300)
-    remap_noise_y_large.inputs["From Min"].default_value = 0.0
-    remap_noise_y_large.inputs["From Max"].default_value = 1.0
-    remap_noise_y_large.inputs["To Min"].default_value = -0.05
-    remap_noise_y_large.inputs["To Max"].default_value = 0.05
-    links.new(separate_noise_large.outputs["Y"], remap_noise_y_large.inputs["Value"])
-
-    # Remap noise: 0~1 → -0.03~0.03 (Medium: ±3% UV distortion = ±30m)
-    # 🔧 Reduced from ±8% to ±3% to prevent terrain spikes
-    remap_noise_x_medium = nodes.new("ShaderNodeMapRange")
-    remap_noise_x_medium.location = (450, -450)
-    remap_noise_x_medium.inputs["From Min"].default_value = 0.0
-    remap_noise_x_medium.inputs["From Max"].default_value = 1.0
-    remap_noise_x_medium.inputs["To Min"].default_value = -0.03
-    remap_noise_x_medium.inputs["To Max"].default_value = 0.03
-    links.new(separate_noise_medium.outputs["X"], remap_noise_x_medium.inputs["Value"])
-
-    remap_noise_y_medium = nodes.new("ShaderNodeMapRange")
-    remap_noise_y_medium.location = (450, -600)
-    remap_noise_y_medium.inputs["From Min"].default_value = 0.0
-    remap_noise_y_medium.inputs["From Max"].default_value = 1.0
-    remap_noise_y_medium.inputs["To Min"].default_value = -0.03
-    remap_noise_y_medium.inputs["To Max"].default_value = 0.03
-    links.new(separate_noise_medium.outputs["Y"], remap_noise_y_medium.inputs["Value"])
-
-    # Combine large + medium distortion (X)
-    add_distort_x = nodes.new("ShaderNodeMath")
-    add_distort_x.operation = "ADD"
-    add_distort_x.location = (650, -200)
-    links.new(remap_noise_x_large.outputs["Result"], add_distort_x.inputs[0])
-    links.new(remap_noise_x_medium.outputs["Result"], add_distort_x.inputs[1])
-
-    # Combine large + medium distortion (Y)
-    add_distort_y = nodes.new("ShaderNodeMath")
-    add_distort_y.operation = "ADD"
-    add_distort_y.location = (650, -400)
-    links.new(remap_noise_y_large.outputs["Result"], add_distort_y.inputs[0])
-    links.new(remap_noise_y_medium.outputs["Result"], add_distort_y.inputs[1])
-
-    # Separate base UV
-    separate_base_uv = nodes.new("ShaderNodeSeparateXYZ")
-    separate_base_uv.location = (200, 100)
-    links.new(combine_xy.outputs["Vector"], separate_base_uv.inputs["Vector"])
-
-    # Add distortion to base UV (X)
-    add_uv_x = nodes.new("ShaderNodeMath")
-    add_uv_x.operation = "ADD"
-    add_uv_x.location = (850, 100)
-    links.new(separate_base_uv.outputs["X"], add_uv_x.inputs[0])
-    links.new(add_distort_x.outputs["Value"], add_uv_x.inputs[1])
-
-    # Add distortion to base UV (Y)
-    add_uv_y = nodes.new("ShaderNodeMath")
-    add_uv_y.operation = "ADD"
-    add_uv_y.location = (850, -100)
-    links.new(separate_base_uv.outputs["Y"], add_uv_y.inputs[0])
-    links.new(add_distort_y.outputs["Value"], add_uv_y.inputs[1])
-
-    # Final distorted UV
-    combine_distorted_uv = nodes.new("ShaderNodeCombineXYZ")
-    combine_distorted_uv.location = (1050, 0)
-    links.new(add_uv_x.outputs["Value"], combine_distorted_uv.inputs["X"])
-    links.new(add_uv_y.outputs["Value"], combine_distorted_uv.inputs["Y"])
+    # UV Distortion 제거!
+    # 바이옴 맵 생성 단계에서 이미 Multi-octave Noise로 울퉁불퉁한 경계 생성됨
+    # Blender에서 추가 왜곡하면 이중 왜곡 → 송곳 현상 발생
 
     # =============================================================================
     # 6. Image Texture 샘플링 및 Attribute 저장
@@ -395,17 +286,17 @@ try:
 
         # Image Texture 노드
         img_tex_node = nodes.new("GeometryNodeImageTexture")
-        img_tex_node.location = (1300, current_y)
+        img_tex_node.location = (200, current_y)
         # Blender 4.5+에서는 inputs['Image']로 이미지 설정
         img_tex_node.inputs["Image"].default_value = loaded_images[param_name]
         # interpolation은 extension_type으로 변경됨
         img_tex_node.extension = "EXTEND"
-        # 🔥 Use DISTORTED UV instead of regular UV!
-        links.new(combine_distorted_uv.outputs["Vector"], img_tex_node.inputs["Vector"])
+        # 기본 UV 사용 (바이옴 맵에서 이미 Noise 왜곡 적용됨)
+        links.new(combine_xy.outputs["Vector"], img_tex_node.inputs["Vector"])
 
         # Map Range (0~1 이미지 값을 파라미터 범위로 변환)
         map_range = nodes.new("ShaderNodeMapRange")
-        map_range.location = (1500, current_y)
+        map_range.location = (400, current_y)
 
         if param_name in ["temperature", "continentalness"]:
             # 0~1 → -1~1
@@ -424,7 +315,7 @@ try:
 
         # Store Named Attribute
         store_attr = nodes.new("GeometryNodeStoreNamedAttribute")
-        store_attr.location = (1700, current_y)
+        store_attr.location = (600, current_y)
         store_attr.data_type = "FLOAT"
         store_attr.domain = "POINT"
         store_attr.inputs["Name"].default_value = param_name

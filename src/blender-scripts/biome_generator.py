@@ -145,12 +145,10 @@ def calculate_influence(
         min_neighbor_distance = 500.0
 
     # Step 3: Multi-octave Noise로 거리 왜곡
-    # Noise 강도를 바이옴 거리에 비례하게 조절
+    # 🔥 중요: seed를 좌표 기반으로만 사용 (point_id 사용 안 함!)
+    # 모든 바이옴이 같은 distortion을 공유해야 윤곽선 아티팩트 방지
     noise_scale_factor = min(1.0, min_neighbor_distance / 1000.0)
-    distortion = multi_octave_noise(x, y, seed=point_id * 1000, scale_factor=noise_scale_factor)
-
-    # 왜곡된 거리 (음수 방지)
-    distorted_distance = max(0.0, real_distance + distortion)
+    distortion = multi_octave_noise(x, y, seed=0, scale_factor=noise_scale_factor)
 
     # Step 4: Coverage 가중치 적용
     # Coverage 클수록 → 영향력 범위 넓어짐
@@ -164,6 +162,14 @@ def calculate_influence(
 
     core_threshold = base_zone_size * core_ratio
     fade_threshold = core_threshold + base_zone_size * fade_ratio
+
+    # 🔥 Noise Clamping: Noise 왜곡이 Core threshold의 30%를 넘지 않도록 제한
+    # 이렇게 하면 경계 픽셀이 극단적으로 뒤집히는 것을 방지 (윤곽선 아티팩트 제거)
+    max_distortion = core_threshold * 0.3
+    distortion = max(-max_distortion, min(max_distortion, distortion))
+
+    # 왜곡된 거리 재계산 (클램핑된 distortion 사용)
+    distorted_distance = max(0.0, real_distance + distortion)
 
     # Step 5: Smoothstep Influence 계산
     if distorted_distance < core_threshold:
