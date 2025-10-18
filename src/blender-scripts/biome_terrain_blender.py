@@ -526,7 +526,7 @@ try:
     # Octave 5: Fine details (세밀한 바위 표면)
     noise_octave_5 = nodes.new("ShaderNodeTexNoise")
     noise_octave_5.location = (1000, -800)
-    noise_octave_5.inputs["Scale"].default_value = 3.0  # 0.33m 단위
+    noise_octave_5.inputs["Scale"].default_value = 5.0  # 0.2m 단위
     noise_octave_5.inputs["Detail"].default_value = 7.0
     noise_octave_5.inputs["Roughness"].default_value = 0.85
     links.new(position_node.outputs["Position"], noise_octave_5.inputs["Vector"])
@@ -534,7 +534,7 @@ try:
     # Octave 6: Ultra-fine details (미세 표면 텍스처)
     noise_octave_6 = nodes.new("ShaderNodeTexNoise")
     noise_octave_6.location = (1000, -950)
-    noise_octave_6.inputs["Scale"].default_value = 10.0  # 0.1m 단위
+    noise_octave_6.inputs["Scale"].default_value = 50.0  # 0.02m 단위
     noise_octave_6.inputs["Detail"].default_value = 8.0
     noise_octave_6.inputs["Roughness"].default_value = 0.9
     links.new(position_node.outputs["Position"], noise_octave_6.inputs["Vector"])
@@ -563,21 +563,21 @@ try:
     # Octave 4 * 0.1 (미세 디테일)
     multiply_octave_4 = nodes.new("ShaderNodeMath")
     multiply_octave_4.operation = "MULTIPLY"
-    multiply_octave_4.inputs[1].default_value = 0.1
+    multiply_octave_4.inputs[1].default_value = 0.05
     multiply_octave_4.location = (1150, -650)
     links.new(noise_octave_4.outputs["Fac"], multiply_octave_4.inputs[0])
 
     # Octave 5 * 0.03 (세밀한 디테일)
     multiply_octave_5 = nodes.new("ShaderNodeMath")
     multiply_octave_5.operation = "MULTIPLY"
-    multiply_octave_5.inputs[1].default_value = 0.03
+    multiply_octave_5.inputs[1].default_value = 0.05
     multiply_octave_5.location = (1150, -800)
     links.new(noise_octave_5.outputs["Fac"], multiply_octave_5.inputs[0])
 
     # Octave 6 * 0.01 (초미세 디테일)
     multiply_octave_6 = nodes.new("ShaderNodeMath")
     multiply_octave_6.operation = "MULTIPLY"
-    multiply_octave_6.inputs[1].default_value = 0.01
+    multiply_octave_6.inputs[1].default_value = 0.5
     multiply_octave_6.location = (1150, -950)
     links.new(noise_octave_6.outputs["Fac"], multiply_octave_6.inputs[0])
 
