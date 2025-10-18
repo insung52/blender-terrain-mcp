@@ -4,7 +4,7 @@
  */
 
 /**
- * V1 바이옴 파라미터 (13개 - 모두 수치형)
+ * V1 바이옴 파라미터 (16개 - 모두 수치형)
  */
 export interface BiomeParametersV1 {
   // === 핵심 지형 파라미터 (5개) ===
@@ -14,7 +14,7 @@ export interface BiomeParametersV1 {
   continentalness: number;  // -1.0 ~ 1.0 (바다 ~ 고원)
   weirdness: number;        // 0.0 ~ 1.0 (일반 ~ 특이)
 
-  // === 시각 파라미터 (6개) ===
+  // === 시각 파라미터 (9개) ===
   vegetation_color_r: number;   // 0.0 ~ 1.0 (식생 R)
   vegetation_color_g: number;   // 0.0 ~ 1.0 (식생 G)
   vegetation_color_b: number;   // 0.0 ~ 1.0 (식생 B)
@@ -22,6 +22,10 @@ export interface BiomeParametersV1 {
   ground_color_r: number;       // 0.0 ~ 1.0 (지표 R)
   ground_color_g: number;       // 0.0 ~ 1.0 (지표 G)
   ground_color_b: number;       // 0.0 ~ 1.0 (지표 B)
+
+  rock_color_r: number;         // 0.0 ~ 1.0 (바위 R) - 경사진 곳에 노출
+  rock_color_g: number;         // 0.0 ~ 1.0 (바위 G)
+  rock_color_b: number;         // 0.0 ~ 1.0 (바위 B)
 
   // === 추가 파라미터 (2개) ===
   snow_start_height: number;    // 0 ~ 5000 (눈 시작 높이, 미터)
@@ -82,6 +86,9 @@ export const PRESET_BIOMES_V1: Record<string, BiomePreset> = {
       ground_color_r: 0.4,
       ground_color_g: 0.4,
       ground_color_b: 0.45,
+      rock_color_r: 0.5,      // 🪨 회색-갈색 바위 (차가운 산)
+      rock_color_g: 0.48,
+      rock_color_b: 0.45,
       // 추가
       snow_start_height: 1500,
       rock_exposure: 0.7
@@ -104,6 +111,9 @@ export const PRESET_BIOMES_V1: Record<string, BiomePreset> = {
       ground_color_r: 0.9,
       ground_color_g: 0.8,
       ground_color_b: 0.6,
+      rock_color_r: 0.7,      // 🪨 붉은-갈색 사암 (따뜻한 사막)
+      rock_color_g: 0.55,
+      rock_color_b: 0.4,
       snow_start_height: 9999,  // 눈 없음
       rock_exposure: 0.3
     },
@@ -125,6 +135,9 @@ export const PRESET_BIOMES_V1: Record<string, BiomePreset> = {
       ground_color_r: 0.3,      // 🟢 초록색 잔디밭 (vegetation_color와 동일)
       ground_color_g: 0.6,      // 🟢 잔디가 덮인 평원
       ground_color_b: 0.2,      // 🟢 GREEN
+      rock_color_r: 0.45,     // 🪨 갈색 암석 (평원)
+      rock_color_g: 0.4,
+      rock_color_b: 0.35,
       snow_start_height: 9999,
       rock_exposure: 0.1
     },
@@ -146,6 +159,9 @@ export const PRESET_BIOMES_V1: Record<string, BiomePreset> = {
       ground_color_r: 0.2,
       ground_color_g: 0.3,
       ground_color_b: 0.5,
+      rock_color_r: 0.3,      // 🪨 어두운 회색 암석 (물가)
+      rock_color_g: 0.3,
+      rock_color_b: 0.35,
       snow_start_height: 9999,
       rock_exposure: 0.0
     },
@@ -167,6 +183,9 @@ export const PRESET_BIOMES_V1: Record<string, BiomePreset> = {
       ground_color_r: 0.25,     // 🟢 어두운 초록 (숲 바닥의 풀/이끼)
       ground_color_g: 0.4,      // 🟢 약간 어두운 초록색
       ground_color_b: 0.2,      // 🟢 DARK GREEN
+      rock_color_r: 0.4,      // 🪨 이끼 낀 어두운 바위 (숲)
+      rock_color_g: 0.38,
+      rock_color_b: 0.3,
       snow_start_height: 9999,
       rock_exposure: 0.2
     },

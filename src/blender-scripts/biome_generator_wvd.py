@@ -209,6 +209,9 @@ def generate_biome_parameter_map_wvd(
         "ground_color_r",
         "ground_color_g",
         "ground_color_b",
+        "rock_color_r",  # 🪨 바위 색상 (경사진 곳에 노출)
+        "rock_color_g",
+        "rock_color_b",
         "snow_start_height",
         "rock_exposure",
     ]
@@ -381,6 +384,9 @@ def main():
                                 "ground_color_r": 0.4,
                                 "ground_color_g": 0.4,
                                 "ground_color_b": 0.45,
+                                "rock_color_r": 0.5,
+                                "rock_color_g": 0.48,
+                                "rock_color_b": 0.45,
                                 "snow_start_height": 1500,
                                 "rock_exposure": 0.7,
                             },

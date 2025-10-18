@@ -161,6 +161,9 @@ try:
         "ground_color_r",
         "ground_color_g",
         "ground_color_b",
+        "rock_color_r",  # 🪨 바위 색상 (경사진 곳에 노출)
+        "rock_color_g",
+        "rock_color_b",
         "snow_start_height",
         "rock_exposure",
     ]
@@ -520,7 +523,23 @@ try:
     noise_octave_4.inputs["Roughness"].default_value = 0.8
     links.new(position_node.outputs["Position"], noise_octave_4.inputs["Vector"])
 
-    # Octave 1 * 0.60 (부드러운 큰 산맥 강화)
+    # Octave 5: Fine details (세밀한 바위 표면)
+    noise_octave_5 = nodes.new("ShaderNodeTexNoise")
+    noise_octave_5.location = (1000, -800)
+    noise_octave_5.inputs["Scale"].default_value = 3.0  # 0.33m 단위
+    noise_octave_5.inputs["Detail"].default_value = 7.0
+    noise_octave_5.inputs["Roughness"].default_value = 0.85
+    links.new(position_node.outputs["Position"], noise_octave_5.inputs["Vector"])
+
+    # Octave 6: Ultra-fine details (미세 표면 텍스처)
+    noise_octave_6 = nodes.new("ShaderNodeTexNoise")
+    noise_octave_6.location = (1000, -950)
+    noise_octave_6.inputs["Scale"].default_value = 10.0  # 0.1m 단위
+    noise_octave_6.inputs["Detail"].default_value = 8.0
+    noise_octave_6.inputs["Roughness"].default_value = 0.9
+    links.new(position_node.outputs["Position"], noise_octave_6.inputs["Vector"])
+
+    # Octave 1 * 3.6 (부드러운 큰 산맥 강화)
     multiply_octave_1 = nodes.new("ShaderNodeMath")
     multiply_octave_1.operation = "MULTIPLY"
     multiply_octave_1.inputs[1].default_value = 3.6
@@ -530,7 +549,7 @@ try:
     # Octave 2 * 0.25 (중간 디테일)
     multiply_octave_2 = nodes.new("ShaderNodeMath")
     multiply_octave_2.operation = "MULTIPLY"
-    multiply_octave_2.inputs[1].default_value = 0.55
+    multiply_octave_2.inputs[1].default_value = 0.5
     multiply_octave_2.location = (1150, -350)
     links.new(noise_octave_2.outputs["Fac"], multiply_octave_2.inputs[0])
 
@@ -541,12 +560,26 @@ try:
     multiply_octave_3.location = (1150, -500)
     links.new(noise_octave_3.outputs["Fac"], multiply_octave_3.inputs[0])
 
-    # Octave 4 * 0.03 (미세 디테일 최소화, 가시 방지)
+    # Octave 4 * 0.1 (미세 디테일)
     multiply_octave_4 = nodes.new("ShaderNodeMath")
     multiply_octave_4.operation = "MULTIPLY"
-    multiply_octave_4.inputs[1].default_value = 0.01
+    multiply_octave_4.inputs[1].default_value = 0.1
     multiply_octave_4.location = (1150, -650)
     links.new(noise_octave_4.outputs["Fac"], multiply_octave_4.inputs[0])
+
+    # Octave 5 * 0.03 (세밀한 디테일)
+    multiply_octave_5 = nodes.new("ShaderNodeMath")
+    multiply_octave_5.operation = "MULTIPLY"
+    multiply_octave_5.inputs[1].default_value = 0.03
+    multiply_octave_5.location = (1150, -800)
+    links.new(noise_octave_5.outputs["Fac"], multiply_octave_5.inputs[0])
+
+    # Octave 6 * 0.01 (초미세 디테일)
+    multiply_octave_6 = nodes.new("ShaderNodeMath")
+    multiply_octave_6.operation = "MULTIPLY"
+    multiply_octave_6.inputs[1].default_value = 0.01
+    multiply_octave_6.location = (1150, -950)
+    links.new(noise_octave_6.outputs["Fac"], multiply_octave_6.inputs[0])
 
     # Add Octave 1 + 2
     add_octave_12 = nodes.new("ShaderNodeMath")
@@ -562,16 +595,30 @@ try:
     links.new(multiply_octave_3.outputs["Value"], add_octave_34.inputs[0])
     links.new(multiply_octave_4.outputs["Value"], add_octave_34.inputs[1])
 
-    # Combined Noise = Octave 1+2+3+4
+    # Add Octave 5 + 6
+    add_octave_56 = nodes.new("ShaderNodeMath")
+    add_octave_56.operation = "ADD"
+    add_octave_56.location = (1300, -875)
+    links.new(multiply_octave_5.outputs["Value"], add_octave_56.inputs[0])
+    links.new(multiply_octave_6.outputs["Value"], add_octave_56.inputs[1])
+
+    # Combined Octave 1+2+3+4
+    combined_noise_1234 = nodes.new("ShaderNodeMath")
+    combined_noise_1234.operation = "ADD"
+    combined_noise_1234.location = (1450, -400)
+    links.new(add_octave_12.outputs["Value"], combined_noise_1234.inputs[0])
+    links.new(add_octave_34.outputs["Value"], combined_noise_1234.inputs[1])
+
+    # Combined Noise = All Octaves (1+2+3+4+5+6)
     combined_noise = nodes.new("ShaderNodeMath")
     combined_noise.operation = "ADD"
-    combined_noise.location = (1450, -400)
-    links.new(add_octave_12.outputs["Value"], combined_noise.inputs[0])
-    links.new(add_octave_34.outputs["Value"], combined_noise.inputs[1])
+    combined_noise.location = (1600, -550)
+    links.new(combined_noise_1234.outputs["Value"], combined_noise.inputs[0])
+    links.new(add_octave_56.outputs["Value"], combined_noise.inputs[1])
 
     # Noise Texture (weirdness용)
     noise_weird = nodes.new("ShaderNodeTexNoise")
-    noise_weird.location = (1000, -800)
+    noise_weird.location = (1000, -1100)
     noise_weird.inputs["Scale"].default_value = 0.1
     noise_weird.inputs["Detail"].default_value = 3.0
     links.new(position_node.outputs["Position"], noise_weird.inputs["Vector"])
@@ -823,15 +870,45 @@ try:
     mat_output = mat_nodes.new("ShaderNodeOutputMaterial")
     mat_output.location = (800, 0)
 
-    # Mix Shader (Ground vs Snow)
-    mix_shader = mat_nodes.new("ShaderNodeMixShader")
-    mix_shader.location = (600, 0)
-    mat_links.new(mix_shader.outputs["Shader"], mat_output.inputs["Surface"])
+    # 🔧 Material 구조: Ground → Snow (높이) → Rock (경사도)
+    # 1. Ground BSDF
+    # 2. Mix Snow (Ground vs Snow) - 높이 기반
+    # 3. Mix Rock (Ground+Snow vs Rock) - 경사도 기반 → 최종 출력
+
+    # Mix Shader (Ground+Snow vs Rock) - 최종 출력, 경사도 기반
+    mix_rock = mat_nodes.new("ShaderNodeMixShader")
+    mix_rock.location = (1000, 0)
+    mat_links.new(mix_rock.outputs["Shader"], mat_output.inputs["Surface"])
+
+    # Mix Shader (Ground vs Snow) - 높이 기반
+    mix_snow = mat_nodes.new("ShaderNodeMixShader")
+    mix_snow.location = (800, 100)
+    mat_links.new(
+        mix_snow.outputs["Shader"], mix_rock.inputs[1]
+    )  # Shader 1 (Ground+Snow)
 
     # Ground Material (Principled BSDF)
     ground_bsdf = mat_nodes.new("ShaderNodeBsdfPrincipled")
-    ground_bsdf.location = (400, 100)
-    mat_links.new(ground_bsdf.outputs["BSDF"], mix_shader.inputs[1])
+    ground_bsdf.location = (200, 200)
+    mat_links.new(ground_bsdf.outputs["BSDF"], mix_snow.inputs[1])  # Shader 1 (Ground)
+
+    # Snow Material (Principled BSDF)
+    snow_bsdf = mat_nodes.new("ShaderNodeBsdfPrincipled")
+    snow_bsdf.location = (600, 0)
+    snow_bsdf.inputs["Base Color"].default_value = (
+        0.95,
+        0.95,
+        1.0,
+        1.0,
+    )  # 눈 (약간 파란빛)
+    snow_bsdf.inputs["Roughness"].default_value = 0.8
+    mat_links.new(snow_bsdf.outputs["BSDF"], mix_snow.inputs[2])  # Shader 2 (Snow)
+
+    # Rock Material (Principled BSDF)
+    rock_bsdf = mat_nodes.new("ShaderNodeBsdfPrincipled")
+    rock_bsdf.location = (800, -200)
+    rock_bsdf.inputs["Roughness"].default_value = 0.9  # 거친 바위 표면
+    mat_links.new(rock_bsdf.outputs["BSDF"], mix_rock.inputs[2])  # Shader 2 (Rock)
 
     # 🔥 Ground Color from biome maps (RGB 채널 분리되어 있음)
     # UV 좌표 가져오기 (텍스처 샘플링용)
@@ -872,43 +949,143 @@ try:
         img_tex_b = None
         log("⚠️ ground_color_b image not found")
 
-    # RGB 채널 합성
+    # RGB 채널 합성 (Ground)
     if img_tex_r and img_tex_g and img_tex_b:
-        combine_rgb = mat_nodes.new("ShaderNodeCombineRGB")
-        combine_rgb.location = (100, 300)
-        mat_links.new(img_tex_r.outputs["Color"], combine_rgb.inputs["R"])
-        mat_links.new(img_tex_g.outputs["Color"], combine_rgb.inputs["G"])
-        mat_links.new(img_tex_b.outputs["Color"], combine_rgb.inputs["B"])
-        mat_links.new(combine_rgb.outputs["Image"], ground_bsdf.inputs["Base Color"])
+        combine_ground_rgb = mat_nodes.new("ShaderNodeCombineRGB")
+        combine_ground_rgb.location = (100, 300)
+        mat_links.new(img_tex_r.outputs["Color"], combine_ground_rgb.inputs["R"])
+        mat_links.new(img_tex_g.outputs["Color"], combine_ground_rgb.inputs["G"])
+        mat_links.new(img_tex_b.outputs["Color"], combine_ground_rgb.inputs["B"])
+        mat_links.new(
+            combine_ground_rgb.outputs["Image"], ground_bsdf.inputs["Base Color"]
+        )
         log("✅ Ground color from biome maps (RGB channels)")
     else:
         # Fallback: 기본 갈색
         ground_bsdf.inputs["Base Color"].default_value = (0.3, 0.25, 0.2, 1.0)
         log("⚠️ Using default brown color (biome maps missing)")
 
-    # Snow Material (Principled BSDF)
-    snow_bsdf = mat_nodes.new("ShaderNodeBsdfPrincipled")
-    snow_bsdf.location = (400, -100)
-    snow_bsdf.inputs["Base Color"].default_value = (
-        0.95,
-        0.95,
-        1.0,
-        1.0,
-    )  # 눈 (약간 파란빛)
-    snow_bsdf.inputs["Roughness"].default_value = 0.8
-    mat_links.new(snow_bsdf.outputs["BSDF"], mix_shader.inputs[2])
+    # 🪨 Rock Color from biome maps (RGB 채널 분리되어 있음)
+    # Rock Color R 채널
+    if "rock_color_r" in loaded_images:
+        rock_tex_r = mat_nodes.new("ShaderNodeTexImage")
+        rock_tex_r.location = (-200, -100)
+        rock_tex_r.image = loaded_images["rock_color_r"]
+        rock_tex_r.extension = "EXTEND"
+        mat_links.new(uv_map_node.outputs["UV"], rock_tex_r.inputs["Vector"])
+    else:
+        rock_tex_r = None
+        log("⚠️ rock_color_r image not found")
+
+    # Rock Color G 채널
+    if "rock_color_g" in loaded_images:
+        rock_tex_g = mat_nodes.new("ShaderNodeTexImage")
+        rock_tex_g.location = (-200, -300)
+        rock_tex_g.image = loaded_images["rock_color_g"]
+        rock_tex_g.extension = "EXTEND"
+        mat_links.new(uv_map_node.outputs["UV"], rock_tex_g.inputs["Vector"])
+    else:
+        rock_tex_g = None
+        log("⚠️ rock_color_g image not found")
+
+    # Rock Color B 채널
+    if "rock_color_b" in loaded_images:
+        rock_tex_b = mat_nodes.new("ShaderNodeTexImage")
+        rock_tex_b.location = (-200, -500)
+        rock_tex_b.image = loaded_images["rock_color_b"]
+        rock_tex_b.extension = "EXTEND"
+        mat_links.new(uv_map_node.outputs["UV"], rock_tex_b.inputs["Vector"])
+    else:
+        rock_tex_b = None
+        log("⚠️ rock_color_b image not found")
+
+    # RGB 채널 합성 (Rock)
+    if rock_tex_r and rock_tex_g and rock_tex_b:
+        combine_rock_rgb = mat_nodes.new("ShaderNodeCombineRGB")
+        combine_rock_rgb.location = (100, -200)
+        mat_links.new(rock_tex_r.outputs["Color"], combine_rock_rgb.inputs["R"])
+        mat_links.new(rock_tex_g.outputs["Color"], combine_rock_rgb.inputs["G"])
+        mat_links.new(rock_tex_b.outputs["Color"], combine_rock_rgb.inputs["B"])
+        mat_links.new(combine_rock_rgb.outputs["Image"], rock_bsdf.inputs["Base Color"])
+        log("✅ Rock color from biome maps (RGB channels)")
+    else:
+        # Fallback: 기본 회색-갈색 바위
+        rock_bsdf.inputs["Base Color"].default_value = (0.45, 0.42, 0.38, 1.0)
+        log("⚠️ Using default gray-brown rock color (biome maps missing)")
 
     # =========================================================================
-    # Snowline Calculation (Temperature-based)
+    # Slope Calculation (경사도 계산 - 바위 노출용)
     # =========================================================================
 
-    # Get vertex position Z (height)
-    geometry_node = mat_nodes.new("ShaderNodeNewGeometry")
-    geometry_node.location = (-600, 0)
+    # Geometry Normal (법선 벡터)
+    geometry_normal = mat_nodes.new("ShaderNodeNewGeometry")
+    geometry_normal.location = (-800, -700)
 
-    separate_xyz = mat_nodes.new("ShaderNodeSeparateXYZ")
-    separate_xyz.location = (-400, 0)
-    mat_links.new(geometry_node.outputs["Position"], separate_xyz.inputs["Vector"])
+    # Separate XYZ (Normal의 Z 성분 추출)
+    separate_normal = mat_nodes.new("ShaderNodeSeparateXYZ")
+    separate_normal.location = (-600, -700)
+    mat_links.new(geometry_normal.outputs["Normal"], separate_normal.inputs["Vector"])
+
+    # Slope = 1.0 - Normal.Z
+    # Normal.Z = 1.0 → 평평 (수평)
+    # Normal.Z = 0.0 → 수직 절벽
+    slope_calc = mat_nodes.new("ShaderNodeMath")
+    slope_calc.operation = "SUBTRACT"
+    slope_calc.inputs[0].default_value = 1.0
+    slope_calc.location = (-400, -700)
+    mat_links.new(separate_normal.outputs["Z"], slope_calc.inputs[1])
+
+    # Get rock_exposure attribute (바이옴별 바위 노출도)
+    rock_exposure_attr = mat_nodes.new("ShaderNodeAttribute")
+    rock_exposure_attr.location = (-600, -900)
+    rock_exposure_attr.attribute_name = "rock_exposure"
+    rock_exposure_attr.attribute_type = "GEOMETRY"
+
+    # rock_exposure에 따라 임계값 조정
+    # 🔧 임계값을 낮춰서 바위가 더 쉽게 노출되도록 수정
+    # rock_exposure 높음 (0.7) → 매우 낮은 경사도에서도 바위 노출 (threshold 0.15)
+    # rock_exposure 낮음 (0.1) → 중간 경사도에서 바위 노출 (threshold 0.45)
+    # threshold = 0.5 - rock_exposure * 0.5
+    multiply_exposure = mat_nodes.new("ShaderNodeMath")
+    multiply_exposure.operation = "MULTIPLY"
+    multiply_exposure.inputs[1].default_value = 0.07  # 0.7 → 0.5
+    multiply_exposure.location = (-400, -900)
+    mat_links.new(rock_exposure_attr.outputs["Fac"], multiply_exposure.inputs[0])
+
+    subtract_threshold = mat_nodes.new("ShaderNodeMath")
+    subtract_threshold.operation = "SUBTRACT"
+    subtract_threshold.inputs[0].default_value = 0.07  # 0.8 → 0.5 (더 낮은 기본값)
+    subtract_threshold.location = (-200, -900)
+    mat_links.new(multiply_exposure.outputs["Value"], subtract_threshold.inputs[1])
+
+    # Slope에서 threshold 뺀 값을 Map Range로 0~1로 정규화
+    # slope < threshold → 0 (Ground)
+    # slope > threshold+0.2 → 1 (Rock)
+    add_threshold_high = mat_nodes.new("ShaderNodeMath")
+    add_threshold_high.operation = "ADD"
+    add_threshold_high.inputs[1].default_value = 0.2  # 블렌딩 범위
+    add_threshold_high.location = (0, -900)
+    mat_links.new(subtract_threshold.outputs["Value"], add_threshold_high.inputs[0])
+
+    slope_map = mat_nodes.new("ShaderNodeMapRange")
+    slope_map.location = (200, -800)
+    slope_map.clamp = True
+    mat_links.new(subtract_threshold.outputs["Value"], slope_map.inputs["From Min"])
+    mat_links.new(add_threshold_high.outputs["Value"], slope_map.inputs["From Max"])
+    slope_map.inputs["To Min"].default_value = 0.0
+    slope_map.inputs["To Max"].default_value = 1.0
+    mat_links.new(slope_calc.outputs["Value"], slope_map.inputs["Value"])
+
+    # =========================================================================
+    # Snowline Calculation (Temperature-based) - Rock보다 먼저 계산
+    # =========================================================================
+
+    # Get vertex position Z (height) - Reuse geometry_normal node
+    separate_position = mat_nodes.new("ShaderNodeSeparateXYZ")
+    separate_position.location = (-600, -1100)
+    mat_links.new(
+        geometry_normal.outputs["Position"], separate_position.inputs["Vector"]
+    )
 
     # Get Temperature attribute (from vertex)
     # Temperature attribute는 Geometry Nodes에서 vertex attribute로 저장됨
@@ -935,8 +1112,8 @@ try:
     # If height < snowline → Ground (0.0)
     compare_height = mat_nodes.new("ShaderNodeMath")
     compare_height.operation = "GREATER_THAN"
-    compare_height.location = (200, -100)
-    mat_links.new(separate_xyz.outputs["Z"], compare_height.inputs[0])
+    compare_height.location = (200, -1100)
+    mat_links.new(separate_position.outputs["Z"], compare_height.inputs[0])
     mat_links.new(snowline_map.outputs["Result"], compare_height.inputs[1])
 
     # Smoothstep for gradual transition
@@ -944,26 +1121,63 @@ try:
     subtract_50 = mat_nodes.new("ShaderNodeMath")
     subtract_50.operation = "SUBTRACT"
     subtract_50.inputs[1].default_value = 50.0
-    subtract_50.location = (0, -250)
+    subtract_50.location = (0, -1200)
     mat_links.new(snowline_map.outputs["Result"], subtract_50.inputs[0])
 
     add_50 = mat_nodes.new("ShaderNodeMath")
     add_50.operation = "ADD"
     add_50.inputs[1].default_value = 50.0
-    add_50.location = (0, -400)
+    add_50.location = (0, -1350)
     mat_links.new(snowline_map.outputs["Result"], add_50.inputs[0])
 
     smooth_map = mat_nodes.new("ShaderNodeMapRange")
-    smooth_map.location = (200, -300)
+    smooth_map.location = (400, -1200)
     smooth_map.clamp = True
     mat_links.new(subtract_50.outputs["Value"], smooth_map.inputs["From Min"])
     mat_links.new(add_50.outputs["Value"], smooth_map.inputs["From Max"])
     smooth_map.inputs["To Min"].default_value = 0.0
     smooth_map.inputs["To Max"].default_value = 1.0
-    mat_links.new(separate_xyz.outputs["Z"], smooth_map.inputs["Value"])
+    # ⚠️ 주의: separate_position.Z는 사용하지 않음 (노이즈 적용된 높이 사용)
 
-    # Connect to Mix Shader Fac
-    mat_links.new(smooth_map.outputs["Result"], mix_shader.inputs["Fac"])
+    # 🔧 눈선에 랜덤 노이즈 추가 (자연스러운 눈 경계)
+    # Noise Texture (위치 기반)
+    snow_noise = mat_nodes.new("ShaderNodeTexNoise")
+    snow_noise.location = (200, -1400)
+    snow_noise.inputs["Scale"].default_value = 5.0  # 작은 스케일로 디테일한 변화
+    snow_noise.inputs["Detail"].default_value = 3.0
+    snow_noise.inputs["Roughness"].default_value = 0.6
+    mat_links.new(geometry_normal.outputs["Position"], snow_noise.inputs["Vector"])
+
+    # Noise를 -30 ~ +30 범위로 변환 (눈선 변동폭)
+    noise_map = mat_nodes.new("ShaderNodeMapRange")
+    noise_map.location = (400, -1400)
+    noise_map.inputs["From Min"].default_value = 0.0
+    noise_map.inputs["From Max"].default_value = 1.0
+    noise_map.inputs["To Min"].default_value = -30.0  # -30m
+    noise_map.inputs["To Max"].default_value = 30.0  # +30m
+    mat_links.new(snow_noise.outputs["Fac"], noise_map.inputs["Value"])
+
+    # 높이 + 노이즈
+    add_noise_to_height = mat_nodes.new("ShaderNodeMath")
+    add_noise_to_height.operation = "ADD"
+    add_noise_to_height.location = (200, -1100)
+    mat_links.new(separate_position.outputs["Z"], add_noise_to_height.inputs[0])
+    mat_links.new(noise_map.outputs["Result"], add_noise_to_height.inputs[1])
+
+    # 노이즈 적용된 높이를 smooth_map에 연결
+    mat_links.new(add_noise_to_height.outputs["Value"], smooth_map.inputs["Value"])
+
+    # Connect to Mix Shader Fac (Ground vs Snow)
+    mat_links.new(smooth_map.outputs["Result"], mix_snow.inputs["Fac"])
+    log("✅ Snow with random noise configured (자연스러운 눈선)")
+
+    # =========================================================================
+    # Rock Application (Slope-based) - Snow 위에 적용
+    # =========================================================================
+
+    # Connect to Mix Shader Fac (Ground+Snow vs Rock)
+    mat_links.new(slope_map.outputs["Result"], mix_rock.inputs["Fac"])
+    log("✅ Slope-based rock blending configured (경사진 곳은 눈 위에 바위 노출)")
 
     # Material 할당
     if terrain_obj.data.materials:
@@ -1040,7 +1254,7 @@ try:
     terrain_obj.select_set(True)
 
     # 🔧 Z축 높이를 25% 감소 (next.md 3번 - 50%의 50%)
-    z_scale_final = z_scale * 0.25
+    z_scale_final = z_scale * 0.5 * 0.6
     log(f"🔧 Z-scale final adjustment: {z_scale} → {z_scale_final} (75% reduction)")
 
     terrain_obj.scale = (terrain_scale, terrain_scale, z_scale_final)

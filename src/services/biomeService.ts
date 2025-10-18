@@ -49,6 +49,16 @@ Generate a biome layout based on the user's description.
         "ground_color_g": number,  // 0.0 ~ 1.0
         "ground_color_b": number,  // 0.0 ~ 1.0
 
+        // 🪨 rock_color: Rock/cliff color (exposed on steep slopes)
+        // Examples:
+        //   - Snowy mountain: GRAY-BROWN (0.5, 0.48, 0.45) - cold rock
+        //   - Desert: RED-BROWN SANDSTONE (0.7, 0.55, 0.4) - warm desert rock
+        //   - Forest: DARK MOSSY ROCK (0.4, 0.38, 0.3) - moss-covered
+        //   - Plains: BROWN ROCK (0.45, 0.4, 0.35) - regular stone
+        "rock_color_r": number,  // 0.0 ~ 1.0 (RGB)
+        "rock_color_g": number,  // 0.0 ~ 1.0
+        "rock_color_b": number,  // 0.0 ~ 1.0
+
         "snow_start_height": number,
         "rock_exposure": number
       },
@@ -208,6 +218,7 @@ export async function generateBiomeLayout(description: string): Promise<BiomeLay
         'temperature', 'humidity', 'erosion', 'continentalness', 'weirdness',
         'vegetation_color_r', 'vegetation_color_g', 'vegetation_color_b',
         'ground_color_r', 'ground_color_g', 'ground_color_b',
+        'rock_color_r', 'rock_color_g', 'rock_color_b',
         'snow_start_height', 'rock_exposure'
       ];
 
