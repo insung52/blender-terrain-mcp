@@ -577,7 +577,7 @@ try:
     # Octave 6 * 0.01 (초미세 디테일)
     multiply_octave_6 = nodes.new("ShaderNodeMath")
     multiply_octave_6.operation = "MULTIPLY"
-    multiply_octave_6.inputs[1].default_value = 0.5
+    multiply_octave_6.inputs[1].default_value = 0.05
     multiply_octave_6.location = (1150, -950)
     links.new(noise_octave_6.outputs["Fac"], multiply_octave_6.inputs[0])
 
@@ -646,7 +646,7 @@ try:
     map_erosion.inputs["From Min"].default_value = 0.0
     map_erosion.inputs["From Max"].default_value = 1.0
     map_erosion.inputs["To Min"].default_value = 0.0
-    map_erosion.inputs["To Max"].default_value = 400.0
+    map_erosion.inputs["To Max"].default_value = 1000.0
     links.new(attr_erosion.outputs["Attribute"], map_erosion.inputs["Value"])
 
     # STEP 3: Combined Multi-Octave Noise와 Erosion 범위를 곱셈
