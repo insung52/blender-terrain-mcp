@@ -542,7 +542,7 @@ try:
     # Octave 1 * 3.6 (부드러운 큰 산맥 강화)
     multiply_octave_1 = nodes.new("ShaderNodeMath")
     multiply_octave_1.operation = "MULTIPLY"
-    multiply_octave_1.inputs[1].default_value = 3.6
+    multiply_octave_1.inputs[1].default_value = 1.6
     multiply_octave_1.location = (1150, -200)
     links.new(noise_octave_1.outputs["Fac"], multiply_octave_1.inputs[0])
 
@@ -890,6 +890,10 @@ try:
     # Ground Material (Principled BSDF)
     ground_bsdf = mat_nodes.new("ShaderNodeBsdfPrincipled")
     ground_bsdf.location = (200, 200)
+    ground_bsdf.inputs["Roughness"].default_value = (
+        1.0  # 완전히 거친 표면 (Specular 제거)
+    )
+    ground_bsdf.inputs["Specular IOR Level"].default_value = 0.0  # Specular 반사 없음
     mat_links.new(ground_bsdf.outputs["BSDF"], mix_snow.inputs[1])  # Shader 1 (Ground)
 
     # Snow Material (Principled BSDF)
@@ -901,13 +905,15 @@ try:
         1.0,
         1.0,
     )  # 눈 (약간 파란빛)
-    snow_bsdf.inputs["Roughness"].default_value = 0.8
+    snow_bsdf.inputs["Roughness"].default_value = 0.9  # 거친 눈 표면
+    snow_bsdf.inputs["Specular IOR Level"].default_value = 0.1  # 약간의 반사만
     mat_links.new(snow_bsdf.outputs["BSDF"], mix_snow.inputs[2])  # Shader 2 (Snow)
 
     # Rock Material (Principled BSDF)
     rock_bsdf = mat_nodes.new("ShaderNodeBsdfPrincipled")
     rock_bsdf.location = (800, -200)
-    rock_bsdf.inputs["Roughness"].default_value = 0.9  # 거친 바위 표면
+    rock_bsdf.inputs["Roughness"].default_value = 1.0  # 완전히 거친 바위 표면
+    rock_bsdf.inputs["Specular IOR Level"].default_value = 0.0  # Specular 반사 없음
     mat_links.new(rock_bsdf.outputs["BSDF"], mix_rock.inputs[2])  # Shader 2 (Rock)
 
     # 🔥 Ground Color from biome maps (RGB 채널 분리되어 있음)

@@ -236,7 +236,9 @@ def generate_biome_parameter_map_wvd(
 
     # Step 3: 가우시안 블러로 경계 블렌딩
     # ⚠️ PIL GaussianBlur는 "L" 모드만 지원하므로, float32로 직접 처리
-    print(f"\n🌫️  Applying Gaussian Blur (radius={blur_radius}) with float32 precision...")
+    print(
+        f"\n🌫️  Applying Gaussian Blur (radius={blur_radius}) with float32 precision..."
+    )
     for param_name in param_names:
         # NumPy 배열을 PIL Image로 변환
         param_map = biome_maps[param_name]
@@ -251,11 +253,14 @@ def generate_biome_parameter_map_wvd(
 
         # Float32 이미지로 변환 후 블러 (정밀도 유지)
         # PIL은 float를 지원하지 않으므로, 32bit int로 변환
-        img_32bit = Image.fromarray((normalized * 4294967295).astype(np.uint32), mode="I")
+        img_32bit = Image.fromarray(
+            (normalized * 4294967295).astype(np.uint32), mode="I"
+        )
 
         # "I" 모드는 GaussianBlur 지원, 하지만 느림
         # 대신 scipy.ndimage로 직접 블러 (더 빠르고 정밀)
         from scipy.ndimage import gaussian_filter
+
         blurred_array = gaussian_filter(normalized, sigma=blur_radius)
 
         # 역정규화
@@ -432,7 +437,7 @@ def main():
 
     # 3. 바이옴 맵 생성 (WVD + Gaussian Blur)
     biome_maps = generate_biome_parameter_map_wvd(
-        biome_points, grid_size=grid_size, blur_radius=100
+        biome_points, grid_size=grid_size, blur_radius=50
     )
 
     # 4. 이미지로 저장
