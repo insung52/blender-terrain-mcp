@@ -303,42 +303,42 @@ try:
     math_large_x.operation = "MULTIPLY"
     math_large_x.location = (600, 550)
     links.new(separate_large.outputs["X"], math_large_x.inputs[0])
-    math_large_x.inputs[1].default_value = 0.2  # ±3% = ±30m
+    math_large_x.inputs[1].default_value = 0.0001  # ±3% = ±30m 0.2
 
     # Large Y offset (±3%)
     math_large_y = nodes.new("ShaderNodeMath")
     math_large_y.operation = "MULTIPLY"
     math_large_y.location = (600, 450)
     links.new(separate_large.outputs["Y"], math_large_y.inputs[0])
-    math_large_y.inputs[1].default_value = 0.2
+    math_large_y.inputs[1].default_value = 0.0001
 
     # Medium X offset (±2%)
     math_medium_x = nodes.new("ShaderNodeMath")
     math_medium_x.operation = "MULTIPLY"
     math_medium_x.location = (600, 350)
     links.new(separate_medium.outputs["X"], math_medium_x.inputs[0])
-    math_medium_x.inputs[1].default_value = 0.06  # ±2% = ±20m
+    math_medium_x.inputs[1].default_value = 0.0001  # ±2% = ±20m 0.06
 
     # Medium Y offset (±2%)
     math_medium_y = nodes.new("ShaderNodeMath")
     math_medium_y.operation = "MULTIPLY"
     math_medium_y.location = (600, 250)
     links.new(separate_medium.outputs["Y"], math_medium_y.inputs[0])
-    math_medium_y.inputs[1].default_value = 0.06
+    math_medium_y.inputs[1].default_value = 0.0001
 
     # Small X offset (±1%)
     math_small_x = nodes.new("ShaderNodeMath")
     math_small_x.operation = "MULTIPLY"
     math_small_x.location = (600, 150)
     links.new(separate_small.outputs["X"], math_small_x.inputs[0])
-    math_small_x.inputs[1].default_value = 0.03  # ±1% = ±10m
+    math_small_x.inputs[1].default_value = 0.0003  # ±1% = ±10m  0.03
 
     # Small Y offset (±1%)
     math_small_y = nodes.new("ShaderNodeMath")
     math_small_y.operation = "MULTIPLY"
     math_small_y.location = (600, 50)
     links.new(separate_small.outputs["Y"], math_small_y.inputs[0])
-    math_small_y.inputs[1].default_value = 0.03
+    math_small_y.inputs[1].default_value = 0.0003
 
     # 합산: Large + Medium + Small
     add_x_1 = nodes.new("ShaderNodeMath")
@@ -523,21 +523,21 @@ try:
     # Octave 1 * 0.60 (부드러운 큰 산맥 강화)
     multiply_octave_1 = nodes.new("ShaderNodeMath")
     multiply_octave_1.operation = "MULTIPLY"
-    multiply_octave_1.inputs[1].default_value = 0.60
+    multiply_octave_1.inputs[1].default_value = 3.6
     multiply_octave_1.location = (1150, -200)
     links.new(noise_octave_1.outputs["Fac"], multiply_octave_1.inputs[0])
 
     # Octave 2 * 0.25 (중간 디테일)
     multiply_octave_2 = nodes.new("ShaderNodeMath")
     multiply_octave_2.operation = "MULTIPLY"
-    multiply_octave_2.inputs[1].default_value = 0.25
+    multiply_octave_2.inputs[1].default_value = 0.55
     multiply_octave_2.location = (1150, -350)
     links.new(noise_octave_2.outputs["Fac"], multiply_octave_2.inputs[0])
 
     # Octave 3 * 0.12 (작은 디테일 약화)
     multiply_octave_3 = nodes.new("ShaderNodeMath")
     multiply_octave_3.operation = "MULTIPLY"
-    multiply_octave_3.inputs[1].default_value = 0.12
+    multiply_octave_3.inputs[1].default_value = 0.05
     multiply_octave_3.location = (1150, -500)
     links.new(noise_octave_3.outputs["Fac"], multiply_octave_3.inputs[0])
 
