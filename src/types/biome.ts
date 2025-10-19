@@ -90,7 +90,7 @@ export const PRESET_BIOMES_V1: Record<string, BiomePreset> = {
       rock_color_g: 0.48,
       rock_color_b: 0.45,
       // 추가
-      snow_start_height: 1500,
+      snow_start_height: 750,  // 50% 낮춤 (1500 → 750)
       rock_exposure: 0.7
     },
     description: '눈 덮인 험준한 산맥'

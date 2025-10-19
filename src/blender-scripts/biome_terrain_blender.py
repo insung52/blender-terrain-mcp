@@ -145,6 +145,29 @@ try:
     )
 
     # =============================================================================
+    # 10.7. Phase 4: Subdivision Surface (Apply Immediately)
+    # =============================================================================
+
+    # Subdivision Surface Modifier 추가
+    subsurf_modifier = terrain_obj.modifiers.new(name="Subdivision", type="SUBSURF")
+    subsurf_modifier.levels = 3  # Level 3 적용 (64배 증가 → 2.5M vertices)
+    subsurf_modifier.render_levels = 3  # 동일
+    subsurf_modifier.subdivision_type = "CATMULL_CLARK"
+
+    log(f"Before Subdivision - Vertex count: {len(terrain_obj.data.vertices):,}")
+    log(
+        f"Subdivision level: 3 (target: ≈{len(terrain_obj.data.vertices) * 64:,} vertices)"
+    )
+
+    # Modifier 즉시 적용 (실제 메시로 변환)
+    try:
+        bpy.ops.object.modifier_apply(modifier=subsurf_modifier.name)
+        log(f"✅ Subdivision Surface applied")
+        log(f"After Subdivision - Vertex count: {len(terrain_obj.data.vertices):,}")
+    except Exception as e:
+        log(f"❌ Failed to apply Subdivision: {e}")
+
+    # =============================================================================
     # 3. 바이옴 이미지 로드
     # =============================================================================
 
@@ -306,42 +329,42 @@ try:
     math_large_x.operation = "MULTIPLY"
     math_large_x.location = (600, 550)
     links.new(separate_large.outputs["X"], math_large_x.inputs[0])
-    math_large_x.inputs[1].default_value = 0.0001  # ±3% = ±30m 0.2
+    math_large_x.inputs[1].default_value = 0.0  # ±3% = ±30m 0.2
 
     # Large Y offset (±3%)
     math_large_y = nodes.new("ShaderNodeMath")
     math_large_y.operation = "MULTIPLY"
     math_large_y.location = (600, 450)
     links.new(separate_large.outputs["Y"], math_large_y.inputs[0])
-    math_large_y.inputs[1].default_value = 0.0001
+    math_large_y.inputs[1].default_value = 0.0
 
     # Medium X offset (±2%)
     math_medium_x = nodes.new("ShaderNodeMath")
     math_medium_x.operation = "MULTIPLY"
     math_medium_x.location = (600, 350)
     links.new(separate_medium.outputs["X"], math_medium_x.inputs[0])
-    math_medium_x.inputs[1].default_value = 0.0001  # ±2% = ±20m 0.06
+    math_medium_x.inputs[1].default_value = 0.0  # ±2% = ±20m 0.06
 
     # Medium Y offset (±2%)
     math_medium_y = nodes.new("ShaderNodeMath")
     math_medium_y.operation = "MULTIPLY"
     math_medium_y.location = (600, 250)
     links.new(separate_medium.outputs["Y"], math_medium_y.inputs[0])
-    math_medium_y.inputs[1].default_value = 0.0001
+    math_medium_y.inputs[1].default_value = 0.0
 
     # Small X offset (±1%)
     math_small_x = nodes.new("ShaderNodeMath")
     math_small_x.operation = "MULTIPLY"
     math_small_x.location = (600, 150)
     links.new(separate_small.outputs["X"], math_small_x.inputs[0])
-    math_small_x.inputs[1].default_value = 0.0003  # ±1% = ±10m  0.03
+    math_small_x.inputs[1].default_value = 0.0  # ±1% = ±10m  0.03
 
     # Small Y offset (±1%)
     math_small_y = nodes.new("ShaderNodeMath")
     math_small_y.operation = "MULTIPLY"
     math_small_y.location = (600, 50)
     links.new(separate_small.outputs["Y"], math_small_y.inputs[0])
-    math_small_y.inputs[1].default_value = 0.0003
+    math_small_y.inputs[1].default_value = 0.0
 
     # 합산: Large + Medium + Small
     add_x_1 = nodes.new("ShaderNodeMath")
@@ -494,7 +517,7 @@ try:
     # Octave 1: Large-scale features (산맥, 계곡)
     noise_octave_1 = nodes.new("ShaderNodeTexNoise")
     noise_octave_1.location = (1000, -200)
-    noise_octave_1.inputs["Scale"].default_value = 0.01  # 매우 큰 스케일 (100m 단위)
+    noise_octave_1.inputs["Scale"].default_value = 0.005  # 매우 큰 스케일 (100m 단위)
     noise_octave_1.inputs["Detail"].default_value = 2.0
     noise_octave_1.inputs["Roughness"].default_value = 0.5
     links.new(position_node.outputs["Position"], noise_octave_1.inputs["Vector"])
@@ -502,7 +525,7 @@ try:
     # Octave 2: Medium features (개별 산봉우리)
     noise_octave_2 = nodes.new("ShaderNodeTexNoise")
     noise_octave_2.location = (1000, -350)
-    noise_octave_2.inputs["Scale"].default_value = 0.05  # 현재 스케일 유지 (20m 단위)
+    noise_octave_2.inputs["Scale"].default_value = 0.01  # 현재 스케일 유지 (20m 단위)
     noise_octave_2.inputs["Detail"].default_value = 4.0
     noise_octave_2.inputs["Roughness"].default_value = 0.6
     links.new(position_node.outputs["Position"], noise_octave_2.inputs["Vector"])
@@ -510,7 +533,7 @@ try:
     # Octave 3: Small features (언덕, 구릉)
     noise_octave_3 = nodes.new("ShaderNodeTexNoise")
     noise_octave_3.location = (1000, -500)
-    noise_octave_3.inputs["Scale"].default_value = 0.2  # 작은 스케일 (5m 단위)
+    noise_octave_3.inputs["Scale"].default_value = 0.05  # 작은 스케일 (5m 단위)
     noise_octave_3.inputs["Detail"].default_value = 5.0
     noise_octave_3.inputs["Roughness"].default_value = 0.7
     links.new(position_node.outputs["Position"], noise_octave_3.inputs["Vector"])
@@ -518,7 +541,7 @@ try:
     # Octave 4: Micro details (바위, 표면 요철)
     noise_octave_4 = nodes.new("ShaderNodeTexNoise")
     noise_octave_4.location = (1000, -650)
-    noise_octave_4.inputs["Scale"].default_value = 1.0  # 매우 작은 스케일 (1m 단위)
+    noise_octave_4.inputs["Scale"].default_value = 0.2  # 매우 작은 스케일 (1m 단위)
     noise_octave_4.inputs["Detail"].default_value = 6.0
     noise_octave_4.inputs["Roughness"].default_value = 0.8
     links.new(position_node.outputs["Position"], noise_octave_4.inputs["Vector"])
@@ -526,7 +549,7 @@ try:
     # Octave 5: Fine details (세밀한 바위 표면)
     noise_octave_5 = nodes.new("ShaderNodeTexNoise")
     noise_octave_5.location = (1000, -800)
-    noise_octave_5.inputs["Scale"].default_value = 5.0  # 0.2m 단위
+    noise_octave_5.inputs["Scale"].default_value = 1.0  # 0.2m 단위
     noise_octave_5.inputs["Detail"].default_value = 7.0
     noise_octave_5.inputs["Roughness"].default_value = 0.85
     links.new(position_node.outputs["Position"], noise_octave_5.inputs["Vector"])
@@ -534,7 +557,7 @@ try:
     # Octave 6: Ultra-fine details (미세 표면 텍스처)
     noise_octave_6 = nodes.new("ShaderNodeTexNoise")
     noise_octave_6.location = (1000, -950)
-    noise_octave_6.inputs["Scale"].default_value = 50.0  # 0.02m 단위
+    noise_octave_6.inputs["Scale"].default_value = 5.0  # 0.02m 단위
     noise_octave_6.inputs["Detail"].default_value = 8.0
     noise_octave_6.inputs["Roughness"].default_value = 0.9
     links.new(position_node.outputs["Position"], noise_octave_6.inputs["Vector"])
@@ -542,42 +565,42 @@ try:
     # Octave 1 * 3.6 (부드러운 큰 산맥 강화)
     multiply_octave_1 = nodes.new("ShaderNodeMath")
     multiply_octave_1.operation = "MULTIPLY"
-    multiply_octave_1.inputs[1].default_value = 1.6
+    multiply_octave_1.inputs[1].default_value = 2.0
     multiply_octave_1.location = (1150, -200)
     links.new(noise_octave_1.outputs["Fac"], multiply_octave_1.inputs[0])
 
     # Octave 2 * 0.25 (중간 디테일)
     multiply_octave_2 = nodes.new("ShaderNodeMath")
     multiply_octave_2.operation = "MULTIPLY"
-    multiply_octave_2.inputs[1].default_value = 0.5
+    multiply_octave_2.inputs[1].default_value = 0.3
     multiply_octave_2.location = (1150, -350)
     links.new(noise_octave_2.outputs["Fac"], multiply_octave_2.inputs[0])
 
     # Octave 3 * 0.12 (작은 디테일 약화)
     multiply_octave_3 = nodes.new("ShaderNodeMath")
     multiply_octave_3.operation = "MULTIPLY"
-    multiply_octave_3.inputs[1].default_value = 0.05
+    multiply_octave_3.inputs[1].default_value = 0.07
     multiply_octave_3.location = (1150, -500)
     links.new(noise_octave_3.outputs["Fac"], multiply_octave_3.inputs[0])
 
     # Octave 4 * 0.1 (미세 디테일)
     multiply_octave_4 = nodes.new("ShaderNodeMath")
     multiply_octave_4.operation = "MULTIPLY"
-    multiply_octave_4.inputs[1].default_value = 0.05
+    multiply_octave_4.inputs[1].default_value = 0.02
     multiply_octave_4.location = (1150, -650)
     links.new(noise_octave_4.outputs["Fac"], multiply_octave_4.inputs[0])
 
     # Octave 5 * 0.03 (세밀한 디테일)
     multiply_octave_5 = nodes.new("ShaderNodeMath")
     multiply_octave_5.operation = "MULTIPLY"
-    multiply_octave_5.inputs[1].default_value = 0.05
+    multiply_octave_5.inputs[1].default_value = 0.01
     multiply_octave_5.location = (1150, -800)
     links.new(noise_octave_5.outputs["Fac"], multiply_octave_5.inputs[0])
 
     # Octave 6 * 0.01 (초미세 디테일)
     multiply_octave_6 = nodes.new("ShaderNodeMath")
     multiply_octave_6.operation = "MULTIPLY"
-    multiply_octave_6.inputs[1].default_value = 0.05
+    multiply_octave_6.inputs[1].default_value = 0.0
     multiply_octave_6.location = (1150, -950)
     links.new(noise_octave_6.outputs["Fac"], multiply_octave_6.inputs[0])
 
@@ -610,11 +633,24 @@ try:
     links.new(add_octave_34.outputs["Value"], combined_noise_1234.inputs[1])
 
     # Combined Noise = All Octaves (1+2+3+4+5+6)
-    combined_noise = nodes.new("ShaderNodeMath")
-    combined_noise.operation = "ADD"
-    combined_noise.location = (1600, -550)
-    links.new(combined_noise_1234.outputs["Value"], combined_noise.inputs[0])
-    links.new(add_octave_56.outputs["Value"], combined_noise.inputs[1])
+    combined_noise_raw = nodes.new("ShaderNodeMath")
+    combined_noise_raw.operation = "ADD"
+    combined_noise_raw.location = (1600, -550)
+    links.new(combined_noise_1234.outputs["Value"], combined_noise_raw.inputs[0])
+    links.new(add_octave_56.outputs["Value"], combined_noise_raw.inputs[1])
+
+    # 🔧 Noise 중심값 조정: 0~1 범위를 -0.5~+0.5로 변환
+    # Blender Noise Texture는 평균 0.5이므로, -0.5 빼기
+    # 총 가중치: 1.0 + 0.5 + 0.05 + 0.05 + 0.05 + 0.05 = 1.7
+    # 중심값: 1.7 * 0.5 = 0.85
+    center_noise = nodes.new("ShaderNodeMath")
+    center_noise.operation = "SUBTRACT"
+    center_noise.inputs[1].default_value = 0.85  # 중심값 제거
+    center_noise.location = (1750, -550)
+    links.new(combined_noise_raw.outputs["Value"], center_noise.inputs[0])
+
+    # Combined Noise (centered)
+    combined_noise = center_noise
 
     # Noise Texture (weirdness용)
     noise_weird = nodes.new("ShaderNodeTexNoise")
@@ -639,17 +675,26 @@ try:
         attr_continentalness.outputs["Attribute"], map_continentalness.inputs["Value"]
     )
 
-    # STEP 2: Erosion을 높이 변동 범위로 변환
-    # 0~1 → 0~400m (스케일 조정: 800m→400m)
+    # STEP 2: Erosion 제곱 (산-평지 경계를 가파르게)
+    # erosion^2로 평지(0.1)와 산(0.9)의 차이 극대화
+    # 0.1^2 = 0.01 (거의 평평), 0.9^2 = 0.81 (매우 울퉁불퉁)
+    power_erosion = nodes.new("ShaderNodeMath")
+    power_erosion.operation = "POWER"
+    power_erosion.inputs[1].default_value = 1.0  # 제곱
+    power_erosion.location = (1000, 200)
+    links.new(attr_erosion.outputs["Attribute"], power_erosion.inputs[0])
+
+    # STEP 3: Erosion^2를 높이 변동 범위로 변환
+    # 0~1 → 0~1000m
     map_erosion = nodes.new("ShaderNodeMapRange")
     map_erosion.location = (1200, 200)
     map_erosion.inputs["From Min"].default_value = 0.0
     map_erosion.inputs["From Max"].default_value = 1.0
-    map_erosion.inputs["To Min"].default_value = 0.0
+    map_erosion.inputs["To Min"].default_value = 10.0
     map_erosion.inputs["To Max"].default_value = 1000.0
-    links.new(attr_erosion.outputs["Attribute"], map_erosion.inputs["Value"])
+    links.new(power_erosion.outputs["Value"], map_erosion.inputs["Value"])
 
-    # STEP 3: Combined Multi-Octave Noise와 Erosion 범위를 곱셈
+    # STEP 4: Combined Multi-Octave Noise와 Erosion 범위를 곱셈
     # height_variation = combined_noise * erosion_range
     multiply_noise_erosion = nodes.new("ShaderNodeMath")
     multiply_noise_erosion.operation = "MULTIPLY"
@@ -1109,8 +1154,8 @@ try:
     snowline_map.location = (-200, -200)
     snowline_map.inputs["From Min"].default_value = -1.0
     snowline_map.inputs["From Max"].default_value = 1.0
-    snowline_map.inputs["To Min"].default_value = 500.0  # 추운 곳: 500m부터 눈
-    snowline_map.inputs["To Max"].default_value = 4000.0  # 더운 곳: 4000m부터만 눈
+    snowline_map.inputs["To Min"].default_value = 250.0  # 추운 곳: 500m부터 눈
+    snowline_map.inputs["To Max"].default_value = 2000.0  # 더운 곳: 4000m부터만 눈
     mat_links.new(temp_attr.outputs["Fac"], snowline_map.inputs["Value"])
 
     # Compare: height >= snowline?
@@ -1193,6 +1238,31 @@ try:
 
     log("✅ Material created and assigned")
 
+    log("[10.7] Phase 4: Applying Subdivision Surface...")
+    bpy.context.view_layer.objects.active = terrain_obj
+    terrain_obj.select_set(True)
+
+    # =============================================================================
+    # 10.8. Terrain Scale 적용 (Subdivision 이후)
+    # =============================================================================
+
+    log("[10.8] Applying terrain scale (after subdivision)...")
+    bpy.context.view_layer.objects.active = terrain_obj
+    terrain_obj.select_set(True)
+
+    # 🔧 Z축 높이를 25% 감소 (next.md 3번 - 50%의 50%)
+    z_scale_final = z_scale * 0.5 * 0.6 * 0.2
+    log(f"🔧 Z-scale final adjustment: {z_scale} → {z_scale_final} (75% reduction)")
+
+    terrain_obj.scale = (terrain_scale, terrain_scale, z_scale_final)
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+
+    final_size = base_size * terrain_scale
+    max_height = height_multiplier * z_scale_final
+
+    log(f"✅ Scale applied: XY={terrain_scale}x, Z={z_scale_final}x")
+    log(f"   Final size: {final_size:,}m × {final_size:,}m × {max_height}m")
+
     # =============================================================================
     # 10.6. Geometry Nodes Modifier Apply
     # =============================================================================
@@ -1224,54 +1294,8 @@ try:
     if len(terrain_obj.data.polygons) == 0:
         log(f"❌ ERROR: Mesh has no faces after modifier apply!")
 
-    # =============================================================================
-    # 10.7. Phase 4: Subdivision Surface (Apply Immediately)
-    # =============================================================================
-
-    log("[10.7] Phase 4: Applying Subdivision Surface...")
-    bpy.context.view_layer.objects.active = terrain_obj
-    terrain_obj.select_set(True)
-
-    # Subdivision Surface Modifier 추가
-    subsurf_modifier = terrain_obj.modifiers.new(name="Subdivision", type="SUBSURF")
-    subsurf_modifier.levels = 3  # Level 3 적용 (64배 증가 → 2.5M vertices)
-    subsurf_modifier.render_levels = 3  # 동일
-    subsurf_modifier.subdivision_type = "CATMULL_CLARK"
-
-    log(f"Before Subdivision - Vertex count: {len(terrain_obj.data.vertices):,}")
-    log(
-        f"Subdivision level: 3 (target: ≈{len(terrain_obj.data.vertices) * 64:,} vertices)"
-    )
-
-    # Modifier 즉시 적용 (실제 메시로 변환)
-    try:
-        bpy.ops.object.modifier_apply(modifier=subsurf_modifier.name)
-        log(f"✅ Subdivision Surface applied")
-        log(f"After Subdivision - Vertex count: {len(terrain_obj.data.vertices):,}")
-    except Exception as e:
-        log(f"❌ Failed to apply Subdivision: {e}")
-
-    # =============================================================================
-    # 10.8. Terrain Scale 적용 (Subdivision 이후)
-    # =============================================================================
-
-    log("[10.8] Applying terrain scale (after subdivision)...")
-    bpy.context.view_layer.objects.active = terrain_obj
-    terrain_obj.select_set(True)
-
-    # 🔧 Z축 높이를 25% 감소 (next.md 3번 - 50%의 50%)
-    z_scale_final = z_scale * 0.5 * 0.6
-    log(f"🔧 Z-scale final adjustment: {z_scale} → {z_scale_final} (75% reduction)")
-
-    terrain_obj.scale = (terrain_scale, terrain_scale, z_scale_final)
+    terrain_obj.scale = (1, 1, 0.3)
     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-
-    final_size = base_size * terrain_scale
-    max_height = height_multiplier * z_scale_final
-
-    log(f"✅ Scale applied: XY={terrain_scale}x, Z={z_scale_final}x")
-    log(f"   Final size: {final_size:,}m × {final_size:,}m × {max_height}m")
-
     # =============================================================================
     # 11. 카메라 설정 (Orthographic Top-Down)
     # =============================================================================

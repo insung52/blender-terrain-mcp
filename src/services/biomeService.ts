@@ -62,7 +62,7 @@ Generate a biome layout based on the user's description.
         "snow_start_height": number,
         "rock_exposure": number
       },
-      "coverage": number,  // 0.1 ~ 1.0 (influence radius)
+      "coverage": number,  // 0.01 ~ 1.0 (influence radius)
       "description": string
     }
   ],
@@ -80,16 +80,27 @@ Generate a biome layout based on the user's description.
    - Middle: y ≈ 40~60
    - Bottom: y ≈ 15~25
 4. Coverage rules:
-   - 🏔️ **Mountains/Hills (continentalness > 0.5)**: ALWAYS use small coverage = 0.2~0.35
+   - 🏔️ **Mountains/Hills (continentalness > 0.5)**: ALWAYS use small coverage = 0.05~0.15
      - Mountains should be sharp peaks, not wide plateaus
-     - Exception: User explicitly says "very large mountain range" → 0.35~0.45
+     - Exception: User explicitly says "very large mountain range" → 0.15~0.3
    - Plains/Deserts/Forests: Normal coverage = 0.25~0.35
    - Lakes/Swamps: Small to medium = 0.15~0.25
-5. Erosion for mountains:
-   - Mountains should have high erosion (0.7~0.9) for rugged, rocky appearance
-6. Blend distance: Natural transitions = 15~20, Sharp boundaries = 5~10
-7. Use preset biomes when possible, but feel free to customize parameters
-8. Boundary blending creates automatic transition biomes (plains + lake → beach)
+5. Erosion guidelines:
+   - 🏔️ **Mountains**: High erosion (0.7~0.9) for rugged, rocky appearance
+   - 🌾 **Plains/Grasslands/Deserts**: Low erosion (0.1~0.2) for gentle rolling terrain
+   - 🌲 **Forests**: Medium erosion (0.3~0.5) for hilly woodland
+   - 🏞️ **Perfect flat terrain**: ONLY when user explicitly requests "완벽한 평지" or "perfectly flat" → erosion = 0.0
+6. Continentalness & Water guidelines:
+   - 🌊 **Shallow water (lakes, ponds, rivers)**: continentalness = -0.1 ~ -0.3 (slightly below ground level)
+     - Use -0.1 for very shallow water, -0.3 for deeper lakes
+     - NEVER use -0.8 unless user explicitly says "deep ocean" or "very deep water"
+   - 🏞️ **Swamps/Marshlands**: continentalness = 0.0, erosion = 0.3
+     - Ground level but with erosion to create natural puddles and uneven terrain
+     - Multiple small water pools will form naturally from erosion
+   - 🌊 **Deep ocean**: continentalness = -0.8 ~ -1.0 (ONLY if user explicitly requests)
+7. Blend distance: Natural transitions = 15~20, Sharp boundaries = 5~10
+8. Use preset biomes when possible, but feel free to customize parameters
+9. Boundary blending creates automatic transition biomes (plains + lake → beach)
 
 **Examples:**
 
@@ -100,7 +111,7 @@ AI Response:
     {
       "position": [15, 50],
       "biome_params": { /* snowy_mountain preset */ },
-      "coverage": 0.25,  // 🏔️ Mountain: small coverage for sharp peak
+      "coverage": 0.1,  // 🏔️ Mountain: small coverage for sharp peak
       "description": "snowy_mountain"
     },
     {

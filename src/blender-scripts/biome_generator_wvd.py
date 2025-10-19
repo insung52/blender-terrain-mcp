@@ -261,7 +261,9 @@ def generate_biome_parameter_map_wvd(
         # 대신 scipy.ndimage로 직접 블러 (더 빠르고 정밀)
         from scipy.ndimage import gaussian_filter
 
-        blurred_array = gaussian_filter(normalized, sigma=blur_radius)
+        # 🔧 mode='nearest': 경계에서 가장 가까운 값 복제 (외삽 방지)
+        # 기본값 'reflect'는 경계를 반사시켜 예상치 못한 값 생성
+        blurred_array = gaussian_filter(normalized, sigma=blur_radius, mode="nearest")
 
         # 역정규화
         if max_val > min_val:
@@ -437,7 +439,7 @@ def main():
 
     # 3. 바이옴 맵 생성 (WVD + Gaussian Blur)
     biome_maps = generate_biome_parameter_map_wvd(
-        biome_points, grid_size=grid_size, blur_radius=50
+        biome_points, grid_size=grid_size, blur_radius=100
     )
 
     # 4. 이미지로 저장
