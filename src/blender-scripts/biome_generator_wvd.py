@@ -10,6 +10,8 @@ from typing import List, Dict, Tuple, Any
 import numpy as np
 from PIL import Image, ImageFilter
 import os
+import random
+import time
 
 # Windows 콘솔 UTF-8 인코딩 설정
 if sys.platform == "win32":
@@ -102,7 +104,7 @@ def multi_octave_noise(
 
 
 def assign_biome_regions_wvd(
-    biome_points: List[Dict[str, Any]], grid_size: int = 100
+    biome_points: List[Dict[str, Any]], grid_size: int = 100, random_seed: int = None
 ) -> np.ndarray:
     """
     Weighted Voronoi Diagram으로 바이옴 영역 할당
@@ -113,16 +115,22 @@ def assign_biome_regions_wvd(
     Args:
         biome_points: 바이옴 포인트 리스트 (position은 0~100 범위)
         grid_size: 그리드 크기 (예: 1000)
+        random_seed: 랜덤 시드 (None이면 현재 시간 사용)
 
     Returns:
         (grid_size, grid_size) 바이옴 ID 배열
     """
     biome_id_map = np.zeros((grid_size, grid_size), dtype=int)
 
+    # 🔥 랜덤 시드 생성 (매번 다른 경계선)
+    if random_seed is None:
+        random_seed = int(time.time() * 1000) % 1000000
+
     print(f"🔥 Weighted Voronoi Diagram Algorithm:")
     print(f"  - Coverage-based distance weighting")
     print(f"  - Multi-octave noise for irregular boundaries")
     print(f"  - Each pixel assigned to exactly one biome")
+    print(f"  - Random seed: {random_seed} (for unique boundaries)")
     print()
 
     # 바이옴 포인트 위치 스케일링 (0~100 → 0~grid_size)
@@ -155,7 +163,7 @@ def assign_biome_regions_wvd(
                 biome_local_noise = multi_octave_noise(
                     px_scaled + dx,
                     py_scaled + dy,
-                    seed=i * 1000,  # 바이옴마다 다른 seed
+                    seed=random_seed + i * 1000,  # 🔥 랜덤 시드 + 바이옴 ID
                     scale_factor=1.0,
                 )
 
@@ -193,8 +201,11 @@ def generate_biome_parameter_map_wvd(
     Returns:
         파라미터 이름: (grid_size, grid_size) numpy 배열 딕셔너리
     """
+    # 🔥 랜덤 시드 생성 (매 실행마다 다른 경계선)
+    random_seed = int(time.time() * 1000) % 1000000
+
     # Step 1: 바이옴 영역 할당 (Weighted Voronoi)
-    biome_id_map = assign_biome_regions_wvd(biome_points, grid_size)
+    biome_id_map = assign_biome_regions_wvd(biome_points, grid_size, random_seed)
 
     # 파라미터 이름 리스트
     param_names = [
