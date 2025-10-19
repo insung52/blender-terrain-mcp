@@ -1,6 +1,126 @@
 # 🏔️ Blender Terrain Generator
 
-AI 기반 자동 지형 생성 및 도로 배치 시스템
+## Update 251019, Biome and Water
+
+![Main update 251019](assets/md/1019.png)
+
+### 🎨 Biome-based Terrain System
+
+**자연어 → AI 바이옴 레이아웃 → 현실적인 지형 생성**
+
+이제 Claude AI가 사용자 설명을 분석하여 **여러 바이옴(지형 타입)을 자동 배치**하고, Weighted Voronoi Diagram + Gaussian Blur로 **자연스럽게 블렌딩**된 지형을 생성합니다.
+
+**입력 예시:**
+```
+"위쪽은 높은 산, 왼쪽아래에는 초록색 평지, 오른쪽 아래에는 사막, 중앙에는 작은 호수"
+```
+
+**AI가 자동 생성:**
+- 🏔️ **Snowy Mountain** (위쪽): continentalness=0.6, erosion=0.8, coverage=0.12
+- 🌾 **Plains** (왼쪽 아래): continentalness=0.3, erosion=0.2, coverage=0.3
+- 🏜️ **Desert** (오른쪽 아래): continentalness=0.5, erosion=0.3, coverage=0.3
+- 💧 **Lake** (중앙): continentalness=-0.2, erosion=0.0, coverage=0.15
+
+**기술 스택:**
+- **16개 바이옴 파라미터**: temperature, humidity, erosion, continentalness, weirdness + 3색상×3타입
+- **WVD 알고리즘**: Coverage 기반 영역 할당
+- **16bit PNG 맵**: 1000×1000 해상도, 실제 지형의 0.76cm 단위 정밀도
+- **Multi-Octave Noise**: 6단계 디테일 (대륙 → 바위 표면)
+- **Erosion Squaring**: 비선형 산-평지 경계
+- **Slope-based Rock**: 경사진 곳에 바위 노출
+
+![Main update 251019](assets/md/biome_erosion_unblur.png)
+- 실제 생성된 Biome Map 이미지
+
+![Main update 251019](assets/md/biome_erosion_blur.png)
+- Gaussian Blur 적용, 지형들의 파라미터를 블렌딩 하는 효과. 실제 지형 생성시 자연스럽게 지형들이 이어짐
+
+![alt text](assets/md/maps.png)
+총 16개의 Biome Map 이미지들이 사용됨.
+
+**지형 생성 상세 프로세스:**
+
+1. **Multi-Octave Noise System (6단계)**
+   ```
+   Octave 1: Large-scale (200m 주기) × 2.0    - 대륙 형태
+   Octave 2: Medium (50m 주기) × 0.8         - 산맥 굴곡
+   Octave 3: Small (10m 주기) × 0.05         - 언덕
+   Octave 4: Micro (1m 주기) × 0.005         - 바위 굴곡
+   Octave 5: Fine (0.33m 주기) × 0.005       - 바위 표면
+   Octave 6: Ultra-fine (0.02m 주기) × 0.05  - 미세 텍스처
+   ```
+   - 총 가중치 1.7 → 중심값 0.85 제거 (평지에서 불필요한 높이 추가 방지)
+
+2. **Erosion 기반 높이 변동**
+   - `erosion²` 적용 → 비선형 산-평지 경계
+   - 평지 (erosion=0.1): 0.01² × 1000m = **10m 변동**
+   - 산 (erosion=0.9): 0.81² × 1000m = **656m 변동**
+
+3. **경사도 기반 바위 노출**
+   - Normal.Z로 경사도 계산: `slope = 1.0 - normal.Z`
+   - `rock_exposure` 파라미터로 임계값 조정
+   - 경사진 곳 (slope > threshold): 눈 위에 바위 드러남
+   - Material 순서: Ground → Snow (높이) → Rock (경사도)
+
+4. **눈 경계 랜덤화**
+   - `snow_start_height` ± 30m Noise Texture
+   - 자연스러운 눈선 경계 (계단식 X)
+
+5. **계곡 침식**
+   - `valley_depth = (1 - continentalness) / 2 × humidity × 100m`
+   - 습한 저지대에 자연스러운 계곡 생성 
+
+---
+
+### 💧 Realistic Water System
+
+**투명한 물 메시 + Fresnel 반사 + 깊이별 색상 변화**
+
+수면(z=0) 보다 낮은 지점들, 예를 들어 호수/바다가 이제 **별도의 투명 물 메시**로 렌더링되며, 깊이에 따라 자연스럽게 색이 진해집니다.
+
+**구현:**
+- **1000m × 1000m × 400m 직육면체** 물 메시 (수면 Z=0)
+- **Principled BSDF**: IOR=1.333 (물의 굴절률), Transmission=0.95
+- **Fresnel 반사**: 수직 → 투명, 비스듬 → 반사 (각도 기반)
+- **Volume Absorption**: 깊이 10m → 밝은 파랑, 400m → 진한 파랑
+- **Screen Space Reflections**: 물 표면에 지형 반사
+
+**효과:**
+- ✅ 얕은 호수: 바닥 흙색 보임 + 물 색 약간
+- ✅ 깊은 바다: 진한 어두운 파란색
+- ✅ 수면 반사: 주변 지형이 물에 비침
+- ✅ 물과 땅 자연스러운 경계
+
+---
+
+### 📊 Technical Details
+
+**파일 구조:**
+```
+src/
+├── types/biome.ts              # 16개 바이옴 파라미터 정의
+├── services/biomeService.ts    # Claude AI 프롬프트
+└── blender-scripts/
+    ├── biome_generator_wvd.py     # WVD + Gaussian Blur
+    └── biome_terrain_blender.py   # 지형 + 물 메시 생성
+```
+
+**주요 알고리즘:**
+1. **Weighted Voronoi Diagram**: Coverage 값으로 영향 범위 조정
+2. **Gaussian Blur (σ=100)**: 경계 블렌딩 (`mode='nearest'`로 외삽 방지)
+3. **Noise Centering**: 평균 0.85 제거 → 평지에서 불필요한 높이 추가 방지
+4. **Continentalness → Height**: `continentalness × 1000m` (0 = 해수면)
+5. **Valley Erosion**: `depth = (1 - continentalness) / 2 × humidity × 100m`
+
+**성능:**
+- **Vertices**: 2,560,000 (200×200 grid → Subdivision Level 3)
+- **Biome Maps**: 1000×1000 × 16개 PNG (16bit)
+- **Render Time**: ~5초 (EEVEE_NEXT)
+
+---
+
+
+## AI 기반 자동 지형 생성 및 도로 배치 시스템
 
 **Blender + Claude AI + Node.js**를 활용하여 자연어 설명만으로 3D 지형을 생성하고, 그림판처럼 간편하게 도로를 그려 배치할 수 있는 웹 서비스입니다.
 
