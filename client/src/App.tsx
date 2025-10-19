@@ -415,7 +415,7 @@ function App() {
 
   return (
     <div className="app">
-      <h1>🏔️ Blender Terrain Generator</h1>
+      <h1>🏔️ Terrain Generator</h1>
 
       {/* Terrain Section */}
       <div className="section">
