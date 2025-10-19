@@ -23,8 +23,8 @@
 
 **기술 스택:**
 - **16개 바이옴 파라미터**: temperature, humidity, erosion, continentalness, weirdness + 3색상×3타입
-- **WVD 알고리즘**: Coverage 기반 영역 할당
-- **16bit PNG 맵**: 1000×1000 해상도, 실제 지형의 0.76cm 단위 정밀도
+- **WVD 알고리즘**: Coverage 기반 영역 할당 + 매 실행마다 랜덤 경계선
+- **16bit PNG 맵**: 8bit (0~255) 사용 시 높이 500m 지형에서 2m마다 계단식 층 발생 → 16bit (0~65535)로 0.76cm 정밀도 확보
 - **Multi-Octave Noise**: 6단계 디테일 (대륙 → 바위 표면)
 - **Erosion Squaring**: 비선형 산-평지 경계
 - **Slope-based Rock**: 경사진 곳에 바위 노출
