@@ -39,12 +39,16 @@ Generate a biome layout based on the user's description.
         "vegetation_color_b": number,  // 0.0 ~ 1.0
 
         // 🟫 ground_color: MAIN terrain color (what you actually see on the ground mesh)
+        // ⚠️ IMPORTANT: Water (lakes, rivers, ocean) uses separate water mesh with transparency
+        //    So ground_color for water biomes should be SOIL/SAND color (what's under the water)
         // Examples:
         //   - Grass plains: GREEN (0.3, 0.6, 0.2) - covered with grass
         //   - Desert: SANDY YELLOW (0.8, 0.7, 0.4) - sand color
         //   - Swamp: DARK GREEN/GRAY (0.25, 0.3, 0.2) - murky water/mud
         //   - Snow: WHITE (0.9, 0.9, 0.95) - snow covered
         //   - Rocky mountain: GRAY/BROWN (0.4, 0.4, 0.45) - exposed rock
+        //   - 🌊 Lake/River: BROWN SOIL (0.4, 0.35, 0.25) - lake bed soil color
+        //   - 🌊 Ocean: DARK GRAY SAND (0.3, 0.3, 0.3) - ocean floor sand
         "ground_color_r": number,  // 0.0 ~ 1.0 (RGB)
         "ground_color_g": number,  // 0.0 ~ 1.0
         "ground_color_b": number,  // 0.0 ~ 1.0

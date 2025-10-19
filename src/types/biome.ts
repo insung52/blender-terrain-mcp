@@ -156,10 +156,10 @@ export const PRESET_BIOMES_V1: Record<string, BiomePreset> = {
       vegetation_color_r: 0.2,
       vegetation_color_g: 0.4,
       vegetation_color_b: 0.3,
-      ground_color_r: 0.2,
-      ground_color_g: 0.3,
-      ground_color_b: 0.5,
-      rock_color_r: 0.3,      // 🪨 어두운 회색 암석 (물가)
+      ground_color_r: 0.4,      // 🟫 호수 바닥 흙색 (갈색) - 물은 별도 메시
+      ground_color_g: 0.35,     // 🟫 BROWN SOIL
+      ground_color_b: 0.25,     // 🟫 투명한 물 메시 아래 보임
+      rock_color_r: 0.3,        // 🪨 어두운 회색 암석 (물가)
       rock_color_g: 0.3,
       rock_color_b: 0.35,
       snow_start_height: 9999,

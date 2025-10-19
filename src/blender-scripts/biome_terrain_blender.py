@@ -1300,6 +1300,113 @@ try:
 
     terrain_obj.scale = (1, 1, 0.3)
     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+
+    # =============================================================================
+    # 10.9. 물 메시 생성 (Water Cube)
+    # =============================================================================
+
+    log("[10.9] Creating water mesh...")
+
+    # 직육면체 물 메시 생성
+    # 크기: 1000m × 1000m × 400m
+    # 위치: 수면(윗면) Z=0, 바닥면 Z=-400
+    water_size_xy = final_size  # 지형과 동일한 XY 크기
+    water_depth = 400  # 400m 깊이
+
+    bpy.ops.mesh.primitive_cube_add(
+        size=1.0,  # 기본 크기 1.0에서 스케일로 조정
+        location=(0, 0, -water_depth / 2)  # Z=-200 (중심이 -200이므로 윗면은 0)
+    )
+
+    water_obj = bpy.context.active_object
+    water_obj.name = "Water"
+
+    # 크기 조정: XY=final_size, Z=400
+    water_obj.scale = (water_size_xy, water_size_xy, water_depth)
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+
+    log(f"✅ Water mesh created: {water_size_xy}m × {water_size_xy}m × {water_depth}m")
+    log(f"   Surface at Z=0, Bottom at Z={-water_depth}m")
+
+    # =============================================================================
+    # 10.10. 물 Material 설정 (Glass BSDF + Volume Absorption)
+    # =============================================================================
+
+    log("[10.10] Creating water material...")
+
+    # Material 생성
+    water_material = bpy.data.materials.new(name="WaterMaterial")
+    water_material.use_nodes = True
+    water_nodes = water_material.node_tree.nodes
+    water_links = water_material.node_tree.links
+
+    # 기존 노드 삭제
+    water_nodes.clear()
+
+    # Output
+    water_output = water_nodes.new("ShaderNodeOutputMaterial")
+    water_output.location = (800, 0)
+
+    # Fresnel (각도에 따른 반사)
+    fresnel = water_nodes.new("ShaderNodeFresnel")
+    fresnel.location = (-200, 0)
+    fresnel.inputs["IOR"].default_value = 1.333  # 물의 굴절률
+
+    # Principled BSDF (물 표면)
+    water_bsdf = water_nodes.new("ShaderNodeBsdfPrincipled")
+    water_bsdf.location = (200, 100)
+
+    # 물 표면 속성
+    water_bsdf.inputs["Base Color"].default_value = (0.1, 0.3, 0.5, 1.0)  # 약간 파란색
+    water_bsdf.inputs["Metallic"].default_value = 0.0
+    water_bsdf.inputs["Roughness"].default_value = 0.05  # 매끄러운 수면 (반사 잘됨)
+    water_bsdf.inputs["Specular IOR Level"].default_value = 0.5  # 반사 강도 증가
+    water_bsdf.inputs["IOR"].default_value = 1.333  # 물의 굴절률
+    water_bsdf.inputs["Transmission Weight"].default_value = 0.95  # 95% 투명
+
+    # Fresnel을 Alpha에 연결 (수직: 투명, 비스듬: 불투명/반사)
+    # Fresnel 값 반전: 1 - fresnel (수직에서 더 투명하게)
+    invert_fresnel = water_nodes.new("ShaderNodeMath")
+    invert_fresnel.operation = "SUBTRACT"
+    invert_fresnel.inputs[0].default_value = 1.0
+    invert_fresnel.location = (0, -50)
+    water_links.new(fresnel.outputs["Fac"], invert_fresnel.inputs[1])
+
+    # Alpha 조정: 0.7 ~ 1.0 범위로 매핑 (완전 투명은 방지)
+    map_alpha = water_nodes.new("ShaderNodeMapRange")
+    map_alpha.location = (200, -50)
+    map_alpha.inputs["From Min"].default_value = 0.0
+    map_alpha.inputs["From Max"].default_value = 1.0
+    map_alpha.inputs["To Min"].default_value = 0.7  # 최소 70% 투명도
+    map_alpha.inputs["To Max"].default_value = 0.98  # 최대 98% 투명도
+    water_links.new(invert_fresnel.outputs["Value"], map_alpha.inputs["Value"])
+    water_links.new(map_alpha.outputs["Result"], water_bsdf.inputs["Alpha"])
+
+    # Volume Absorption (깊이에 따른 파란색 흡수)
+    volume_absorption = water_nodes.new("ShaderNodeVolumeAbsorption")
+    volume_absorption.location = (200, -200)
+    volume_absorption.inputs["Color"].default_value = (0.1, 0.3, 0.6, 1.0)  # 파란색 흡수
+    volume_absorption.inputs["Density"].default_value = 0.01  # 흡수 밀도 (조정 가능)
+
+    # 연결
+    water_links.new(water_bsdf.outputs["BSDF"], water_output.inputs["Surface"])
+    water_links.new(volume_absorption.outputs["Volume"], water_output.inputs["Volume"])
+
+    # Material 할당
+    if water_obj.data.materials:
+        water_obj.data.materials[0] = water_material
+    else:
+        water_obj.data.materials.append(water_material)
+
+    # Blend Mode 설정 (투명도 렌더링)
+    water_material.blend_method = 'BLEND'
+    # shadow_method는 Blender 4.5에서 제거됨 (EEVEE_NEXT가 자동 처리)
+
+    log("✅ Water material created and assigned")
+    log("   - Surface: Principled BSDF (IOR=1.333, Transmission=0.95)")
+    log("   - Fresnel: Angle-based reflection (수직=투명, 비스듬=반사)")
+    log("   - Volume: Absorption (파란색, Density=0.01)")
+
     # =============================================================================
     # 11. 카메라 설정 (Orthographic Top-Down)
     # =============================================================================
@@ -1378,6 +1485,23 @@ try:
     log("Using EEVEE_NEXT with shadow disabled rendering...")
 
     scene.render.engine = "BLENDER_EEVEE_NEXT"
+
+    # EEVEE_NEXT Screen Space Reflections 활성화 (물 반사)
+    # Blender 4.5 EEVEE_NEXT는 기본적으로 레이트레이싱 사용
+    try:
+        # EEVEE_NEXT에서는 ray tracing 방식으로 반사 처리
+        if hasattr(scene.eevee, 'use_raytracing'):
+            scene.eevee.use_raytracing = True
+            log("✅ Ray tracing enabled (EEVEE_NEXT)")
+        # 구버전 EEVEE 호환
+        elif hasattr(scene.eevee, 'use_ssr'):
+            scene.eevee.use_ssr = True
+            scene.eevee.use_ssr_refraction = True
+            log("✅ Screen Space Reflections enabled (legacy EEVEE)")
+        else:
+            log("⚠️ Reflection settings not found (EEVEE_NEXT may use default ray tracing)")
+    except Exception as e:
+        log(f"⚠️ Could not configure reflections: {e}")
 
     # 파일 경로 명시적으로 설정
     scene.render.image_settings.file_format = "PNG"
