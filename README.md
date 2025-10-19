@@ -29,14 +29,15 @@
 - **Erosion Squaring**: 비선형 산-평지 경계
 - **Slope-based Rock**: 경사진 곳에 바위 노출
 
+실제 생성된 Biome Map 이미지
 ![Main update 251019](assets/md/biome_erosion_unblur.png)
-- 실제 생성된 Biome Map 이미지
 
+Gaussian Blur 적용, 지형들의 파라미터를 블렌딩 하는 효과. 실제 지형 생성시 자연스럽게 지형들이 이어짐
 ![Main update 251019](assets/md/biome_erosion_blur.png)
-- Gaussian Blur 적용, 지형들의 파라미터를 블렌딩 하는 효과. 실제 지형 생성시 자연스럽게 지형들이 이어짐
 
+총 16개의 Biome Map 이미지들이 사용됨
 ![alt text](assets/md/maps.png)
-총 16개의 Biome Map 이미지들이 사용됨.
+
 
 **지형 생성 상세 프로세스:**
 
