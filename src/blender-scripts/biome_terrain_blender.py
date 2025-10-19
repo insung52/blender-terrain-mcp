@@ -664,12 +664,16 @@ try:
     # =========================================================================
 
     # STEP 1: Continentalness를 실제 해발고도로 변환
-    # -1~1 → -50m~1500m (스케일 조정: 3000m→1500m)
+    # -1~1 → -500m~1500m
+    # continentalness = 0 → height = 500m (해수면 기준)
+    # continentalness = -0.2 → height = 300m (얕은 호수)
+    # continentalness = -1.0 → height = -500m (깊은 바다)
+    # continentalness = 1.0 → height = 1500m (높은 산)
     map_continentalness = nodes.new("ShaderNodeMapRange")
     map_continentalness.location = (1200, 0)
     map_continentalness.inputs["From Min"].default_value = -1.0
     map_continentalness.inputs["From Max"].default_value = 1.0
-    map_continentalness.inputs["To Min"].default_value = -50.0
+    map_continentalness.inputs["To Min"].default_value = -500.0
     map_continentalness.inputs["To Max"].default_value = 1500.0
     links.new(
         attr_continentalness.outputs["Attribute"], map_continentalness.inputs["Value"]
