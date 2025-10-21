@@ -25,6 +25,12 @@ interface Job {
   road?: {
     id: string;
     controlPoints: any[];
+    blendFilePath?: string;
+    previewPath?: string;
+  };
+  result?: {
+    preview?: string;
+    blendFile?: string;
   };
 }
 
@@ -1021,6 +1027,46 @@ function App() {
                       {job.terrain.blendFilePath.split('\\').pop()}
                     </a>
                   </p>
+                  <p style={{ marginTop: '0.5rem' }}>
+                    <strong>Download .glb (GLTF):</strong>{' '}
+                    <button
+                      onClick={async () => {
+                        if (!job.terrain) return;
+                        try {
+                          setLoading(true);
+                          // 1. Export GLTF (캐싱됨)
+                          const exportResponse = await fetch(`${API_URL}/api/terrain/${job.terrain.id}/export-gltf`, {
+                            method: 'POST'
+                          });
+                          const exportData = await exportResponse.json();
+
+                          if (!exportData.success) {
+                            alert('GLTF export failed: ' + exportData.error);
+                            return;
+                          }
+
+                          // 2. Download
+                          window.location.href = `${API_URL}/api/terrain/${job.terrain.id}/download-gltf`;
+                        } catch (error: any) {
+                          alert('Error: ' + error.message);
+                        } finally {
+                          setLoading(false);
+                        }
+                      }}
+                      disabled={loading}
+                      style={{
+                        padding: '0.5rem 1rem',
+                        backgroundColor: '#2196F3',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '0.9em'
+                      }}
+                    >
+                      {loading ? 'Exporting...' : 'Download GLTF'}
+                    </button>
+                  </p>
                 </div>
               )}
 
@@ -1035,6 +1081,49 @@ function App() {
                     >
                       {job.road.blendFilePath.split('\\').pop()}
                     </a>
+                  </p>
+                  <p style={{ marginTop: '0.5rem' }}>
+                    <strong>Download .glb (GLTF):</strong>{' '}
+                    <button
+                      onClick={async () => {
+                        if (!job.road) return;
+                        try {
+                          setLoading(true);
+                          // 1. Export GLTF (캐싱됨)
+                          const exportResponse = await fetch(`${API_URL}/api/road/${job.road.id}/export-gltf`, {
+                            method: 'POST'
+                          });
+                          const exportData = await exportResponse.json();
+
+                          if (!exportData.success) {
+                            alert('GLTF export failed: ' + exportData.error);
+                            return;
+                          }
+
+                          // 2. Download
+                          window.location.href = `${API_URL}/api/road/${job.road.id}/download-gltf`;
+                        } catch (error: any) {
+                          alert('Error: ' + error.message);
+                        } finally {
+                          setLoading(false);
+                        }
+                      }}
+                      disabled={loading}
+                      style={{
+                        padding: '0.5rem 1rem',
+                        backgroundColor: '#2196F3',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '0.9em'
+                      }}
+                    >
+                      {loading ? 'Exporting...' : 'Download GLTF'}
+                    </button>
+                    <div style={{ fontSize: '0.75em', color: '#666', marginTop: '0.25rem' }}>
+                      💡 Includes terrain + water + road
+                    </div>
                   </p>
                 </div>
               )}
@@ -1084,6 +1173,7 @@ function App() {
                     cursor: 'pointer'
                   }}
                   onClick={() => {
+                    if (!job.terrain) return;
                     navigator.clipboard.writeText(job.terrain.id);
                     setRoadTerrainId(job.terrain.id);
                     alert('Terrain ID copied! (Road 섹션에 자동 입력됨)');

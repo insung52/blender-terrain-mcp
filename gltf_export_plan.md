@@ -3,6 +3,8 @@
 ## 목표
 웹페이지에서 지형을 `.glb` (GLTF Binary) 형식으로 다운로드 가능하게 하여, Three.js 등 웹 3D 라이브러리에서 바로 사용 가능하도록 함.
 
+& "C:\Program Files\Blender Foundation\Blender 4.5\blender.exe" "C:\graphics\buildup\blender-terrain-mcp\output\34af5ee7-d0b0-463a-9ad5-e0fe699ec0eb.blend" --background --python "src\blender-scripts\test_gltf_export.py" -- "C:\graphics\buildup\blender-terrain-mcp\output\test_basic.glb"
+
 ---
 
 ## 1. 기본 요구사항

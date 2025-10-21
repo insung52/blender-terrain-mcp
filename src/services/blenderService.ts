@@ -22,6 +22,34 @@ export async function executeBlenderScript(
 }
 
 /**
+ * .blend 파일을 .glb (GLTF Binary)로 변환
+ */
+export async function exportToGLTF(
+  blendFilePath: string,
+  outputGlbPath: string
+): Promise<{ success: boolean; glbPath: string }> {
+  const scriptPath = path.join(config.blenderScriptsDir, 'export_gltf.py');
+
+  const command = `"${config.blenderPath}" "${blendFilePath}" --background --python "${scriptPath}" -- "${outputGlbPath}"`;
+
+  console.log(`🔄 Exporting to GLTF: ${command}`);
+
+  try {
+    const { stdout, stderr } = await execAsync(command, {
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: 180000  // 3분 타임아웃 (Baking 시간 고려)
+    });
+
+    console.log('GLTF Export Output:', stdout);
+    if (stderr) console.error('GLTF Export Errors:', stderr);
+
+    return { success: true, glbPath: outputGlbPath };
+  } catch (error: any) {
+    throw new Error(`GLTF export failed: ${error.message}`);
+  }
+}
+
+/**
  * 바이옴 지형 생성
  */
 export async function generateBiomeTerrain(

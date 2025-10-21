@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { executeBlenderScript } from './services/blenderService';
+import { executeBlenderScript, exportToGLTF } from './services/blenderService';
 import { prisma } from './db/client';
 import { blenderQueue } from './queue/blenderQueue';
 import { analyzeTerrainDescription } from './services/claudeService';
@@ -522,6 +522,128 @@ app.post('/api/road', async (req, res) => {
     });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GLTF Export API
+app.post('/api/terrain/:terrainId/export-gltf', async (req, res) => {
+  try {
+    const { terrainId } = req.params;
+
+    // 1. Terrain 조회
+    const terrain = await prisma.terrain.findUnique({
+      where: { id: terrainId }
+    });
+
+    if (!terrain || !terrain.blendFilePath) {
+      return res.status(404).json({ success: false, error: 'Terrain not found' });
+    }
+
+    // 2. 이미 GLTF 파일이 있는지 확인 (캐싱)
+    const glbPath = terrain.blendFilePath.replace('.blend', '.glb');
+
+    if (fs.existsSync(glbPath)) {
+      console.log(`[API] GLTF file already exists (cached): ${glbPath}`);
+      return res.json({ success: true, glbPath: glbPath, cached: true });
+    }
+
+    // 3. GLTF Export 실행
+    console.log(`[API] Exporting terrain to GLTF: ${terrainId}`);
+    const result = await exportToGLTF(terrain.blendFilePath, glbPath);
+
+    // 4. DB 업데이트 (metadata에 GLTF 경로 저장)
+    await prisma.terrain.update({
+      where: { id: terrainId },
+      data: { metadata: { ...(terrain.metadata as any), gltfPath: glbPath } }
+    });
+
+    console.log(`[API] ✅ GLTF export completed: ${glbPath}`);
+    res.json({ success: true, glbPath: glbPath, cached: false });
+  } catch (error: any) {
+    console.error(`[API] ❌ GLTF export failed:`, error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GLTF 파일 다운로드
+app.get('/api/terrain/:terrainId/download-gltf', async (req, res) => {
+  try {
+    const { terrainId } = req.params;
+    const terrain = await prisma.terrain.findUnique({ where: { id: terrainId } });
+
+    if (!terrain) {
+      return res.status(404).json({ error: 'Terrain not found' });
+    }
+
+    const glbPath = terrain.blendFilePath!.replace('.blend', '.glb');
+
+    if (!fs.existsSync(glbPath)) {
+      return res.status(404).json({ error: 'GLTF file not found. Please export first.' });
+    }
+
+    console.log(`[API] Downloading GLTF: ${glbPath}`);
+    res.download(glbPath, `terrain_${terrainId}.glb`);
+  } catch (error: any) {
+    console.error(`[API] ❌ GLTF download failed:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Road GLTF Export API
+app.post('/api/road/:roadId/export-gltf', async (req, res) => {
+  try {
+    const { roadId } = req.params;
+
+    // 1. Road 조회
+    const road = await prisma.road.findUnique({
+      where: { id: roadId }
+    });
+
+    if (!road || !road.blendFilePath) {
+      return res.status(404).json({ success: false, error: 'Road not found' });
+    }
+
+    // 2. 이미 GLTF 파일이 있는지 확인 (캐싱)
+    const glbPath = road.blendFilePath.replace('.blend', '.glb');
+
+    if (fs.existsSync(glbPath)) {
+      console.log(`[API] GLTF file already exists (cached): ${glbPath}`);
+      return res.json({ success: true, glbPath: glbPath, cached: true });
+    }
+
+    // 3. GLTF Export 실행
+    console.log(`[API] Exporting road to GLTF: ${roadId}`);
+    const result = await exportToGLTF(road.blendFilePath, glbPath);
+
+    console.log(`[API] ✅ GLTF export completed: ${glbPath}`);
+    res.json({ success: true, glbPath: glbPath, cached: false });
+  } catch (error: any) {
+    console.error(`[API] ❌ GLTF export failed:`, error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Road GLTF 파일 다운로드
+app.get('/api/road/:roadId/download-gltf', async (req, res) => {
+  try {
+    const { roadId } = req.params;
+    const road = await prisma.road.findUnique({ where: { id: roadId } });
+
+    if (!road) {
+      return res.status(404).json({ error: 'Road not found' });
+    }
+
+    const glbPath = road.blendFilePath!.replace('.blend', '.glb');
+
+    if (!fs.existsSync(glbPath)) {
+      return res.status(404).json({ error: 'GLTF file not found. Please export first.' });
+    }
+
+    console.log(`[API] Downloading Road GLTF: ${glbPath}`);
+    res.download(glbPath, `road_${roadId}.glb`);
+  } catch (error: any) {
+    console.error(`[API] ❌ GLTF download failed:`, error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 
