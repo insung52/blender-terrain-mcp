@@ -6,3 +6,5 @@ output/
 .env
 log
 .obsidian
+assets/objects
+assets/objects.zip
