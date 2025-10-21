@@ -243,8 +243,13 @@ export async function generateBiomeLayout(description: string): Promise<BiomeLay
         }
       }
 
-      if (point.coverage < 0.1 || point.coverage > 1.0) {
-        throw new Error(`Coverage out of range (0.1~1.0): ${point.coverage}`);
+      // Coverage 범위 자동 보정 (에러 대신 clamp)
+      if (point.coverage < 0.1) {
+        console.warn(`[Biome] Coverage ${point.coverage} too low, clamping to 0.1`);
+        point.coverage = 0.1;
+      } else if (point.coverage > 1.0) {
+        console.warn(`[Biome] Coverage ${point.coverage} too high, clamping to 1.0`);
+        point.coverage = 1.0;
       }
     }
 
