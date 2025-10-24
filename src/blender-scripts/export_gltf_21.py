@@ -119,19 +119,6 @@ def main():
     log(f"Input: {bpy.data.filepath}")
     log(f"Output: {output_glb_path}")
 
-    # 캐시된 원본 GLTF 오브젝트들 삭제
-    # hide_set(True)로 완전히 숨겨진 오브젝트들 = 캐시 원본들
-    # 이들은 메시 데이터를 공유하는 인스턴스의 원본이므로 삭제해도 복사본들은 유지됨
-    deleted_cache_count = 0
-    for obj in list(bpy.data.objects):
-        # hide_set(True)로 숨겨진 것들 (viewport/render/select 모두 숨김)
-        if obj.hide_get() and obj.hide_viewport and obj.hide_render:
-            bpy.data.objects.remove(obj, do_unlink=True)
-            deleted_cache_count += 1
-
-    if deleted_cache_count > 0:
-        log(f"🗑️ Deleted {deleted_cache_count} cached GLTF template objects")
-
     # 지형 객체 찾기
     terrain_obj = bpy.data.objects.get("BiomeTerrain")
     if terrain_obj:
@@ -149,35 +136,14 @@ def main():
     if water_obj:
         log(f"✅ Water found: {water_obj.name} (using as-is)")
 
-    # GLTF Export (기본 설정 - GPU 인스턴싱 없음)
+    # GLTF Export (기본 설정)
     log("Exporting to GLTF...")
-    try:
-        bpy.ops.export_scene.gltf(
-            filepath=output_glb_path,
-            export_format='GLB'
-        )
+    bpy.ops.export_scene.gltf(
+        filepath=output_glb_path,
+        export_format='GLB'
+    )
 
-        log(f"✅ Export complete: {output_glb_path}")
-
-        # 파일이 실제로 생성되었는지 확인
-        if os.path.exists(output_glb_path):
-            file_size = os.path.getsize(output_glb_path) / (1024 * 1024)  # MB
-            log(f"   File size: {file_size:.2f} MB")
-        else:
-            log("⚠️ Warning: Output file not found, but export operation completed")
-
-    except Exception as e:
-        log(f"❌ Export failed: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+    log(f"✅ Export complete: {output_glb_path}")
 
 if __name__ == "__main__":
-    try:
-        main()
-        sys.exit(0)  # 명시적으로 성공 코드 반환
-    except Exception as e:
-        log(f"❌ Script failed: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+    main()
