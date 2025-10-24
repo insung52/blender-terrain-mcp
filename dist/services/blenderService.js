@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.executeBlenderScript = executeBlenderScript;
 exports.exportToGLTF = exportToGLTF;
 exports.generateBiomeTerrain = generateBiomeTerrain;
+exports.placeObjectsOnTerrain = placeObjectsOnTerrain;
 const child_process_1 = require("child_process");
 const util_1 = require("util");
 const promises_1 = require("fs/promises");
@@ -89,4 +90,30 @@ async function generateBiomeTerrain(biomeLayout, outputBlendPath, tempDir) {
         stderr: genStderr + '\n' + blenderStderr,
         imagePaths
     };
+}
+/**
+ * 지형에 오브젝트 배치 (나무 등)
+ */
+async function placeObjectsOnTerrain(roadBlendPath, biomeMapsDir, assetsDir, objectCount = 1000) {
+    const scriptPath = path_1.default.join(config_1.config.blenderScriptsDir, 'object_placer.py');
+    const outputBlendPath = roadBlendPath; // 같은 파일에 덮어쓰기
+    const previewPath = roadBlendPath.replace('.blend', '_preview.png');
+    const command = `"${config_1.config.blenderPath}" "${roadBlendPath}" --background --python "${scriptPath}" -- "${biomeMapsDir}" "${assetsDir}" ${objectCount} "${outputBlendPath}" "${previewPath}"`;
+    console.log(`🔄 Placing objects on terrain: ${command}`);
+    try {
+        const { stdout, stderr } = await execAsync(command, {
+            maxBuffer: 20 * 1024 * 1024, // 20MB (많은 오브젝트 로그)
+            timeout: 60 * 60 * 1000, // 60분 타임아웃 (1000개 오브젝트 처리)
+        });
+        console.log('Object Placer Output:', stdout);
+        if (stderr)
+            console.error('Object Placer Errors:', stderr);
+        // stdout에서 배치된 오브젝트 개수 추출
+        const match = stdout.match(/Placement complete: (\d+)\/\d+ objects placed/);
+        const placedCount = match ? parseInt(match[1]) : 0;
+        return { success: true, placedCount };
+    }
+    catch (error) {
+        throw new Error(`Object placement failed: ${error.message}`);
+    }
 }

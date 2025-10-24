@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -581,6 +614,67 @@ app.get('/api/road/:roadId/download-gltf', async (req, res) => {
     catch (error) {
         console.error(`[API] ❌ GLTF download failed:`, error.message);
         res.status(500).json({ error: error.message });
+    }
+});
+// Road에 오브젝트 배치
+app.post('/api/road/:roadId/add-objects', async (req, res) => {
+    try {
+        const { roadId } = req.params;
+        const { objectCount = 1000 } = req.body;
+        console.log(`[API] Adding objects to road: ${roadId}, count: ${objectCount}`);
+        // 1. Road 조회
+        const road = await client_1.prisma.road.findUnique({
+            where: { id: roadId },
+            include: { terrain: true }
+        });
+        if (!road || !road.blendFilePath) {
+            return res.status(404).json({ success: false, error: 'Road not found' });
+        }
+        if (!road.terrain) {
+            return res.status(404).json({ success: false, error: 'Terrain not found for this road' });
+        }
+        // 2. Biome maps 경로 찾기
+        const terrainPreviewPath = road.terrain.topViewPath;
+        if (!terrainPreviewPath) {
+            return res.status(404).json({ success: false, error: 'Terrain preview not found' });
+        }
+        // Biome maps 경로: output/biome_<terrain_id>/biome_maps
+        const previewBasename = path_1.default.basename(terrainPreviewPath, '_preview.png');
+        const biomeMapsDir = path_1.default.join(path_1.default.dirname(terrainPreviewPath), `biome_${previewBasename}`, 'biome_maps');
+        if (!fs_1.default.existsSync(biomeMapsDir)) {
+            return res.status(404).json({ success: false, error: 'Biome maps not found' });
+        }
+        // 3. Assets 경로
+        const assetsDir = path_1.default.join(process.cwd(), 'assets');
+        // 4. 오브젝트 배치 실행
+        console.log(`[API] Placing objects...`);
+        console.log(`  - Road blend: ${road.blendFilePath}`);
+        console.log(`  - Biome maps: ${biomeMapsDir}`);
+        console.log(`  - Assets: ${assetsDir}`);
+        const { placeObjectsOnTerrain } = await Promise.resolve().then(() => __importStar(require('./services/blenderService')));
+        const result = await placeObjectsOnTerrain(road.blendFilePath, biomeMapsDir, assetsDir, objectCount);
+        console.log(`[API] ✅ Objects placed: ${result.placedCount}/${objectCount}`);
+        // 5. DB 업데이트 (metadata에 오브젝트 정보 저장)
+        await client_1.prisma.road.update({
+            where: { id: roadId },
+            data: {
+                metadata: {
+                    ...road.metadata,
+                    hasObjects: true,
+                    objectCount: result.placedCount
+                }
+            }
+        });
+        res.json({
+            success: true,
+            roadId,
+            objectCount: result.placedCount,
+            previewPath: road.previewPath
+        });
+    }
+    catch (error) {
+        console.error(`[API] ❌ Object placement failed:`, error.message);
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 // Serve static files from React app (프로덕션 모드)

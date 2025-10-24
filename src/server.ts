@@ -647,6 +647,85 @@ app.get('/api/road/:roadId/download-gltf', async (req, res) => {
   }
 });
 
+// Road에 오브젝트 배치
+app.post('/api/road/:roadId/add-objects', async (req, res) => {
+  try {
+    const { roadId } = req.params;
+    const { objectCount = 1000 } = req.body;
+
+    console.log(`[API] Adding objects to road: ${roadId}, count: ${objectCount}`);
+
+    // 1. Road 조회
+    const road = await prisma.road.findUnique({
+      where: { id: roadId },
+      include: { terrain: true }
+    });
+
+    if (!road || !road.blendFilePath) {
+      return res.status(404).json({ success: false, error: 'Road not found' });
+    }
+
+    if (!road.terrain) {
+      return res.status(404).json({ success: false, error: 'Terrain not found for this road' });
+    }
+
+    // 2. Biome maps 경로 찾기
+    const terrainPreviewPath = road.terrain.topViewPath;
+    if (!terrainPreviewPath) {
+      return res.status(404).json({ success: false, error: 'Terrain preview not found' });
+    }
+
+    // Biome maps 경로: output/biome_<terrain_id>/biome_maps
+    const previewBasename = path.basename(terrainPreviewPath, '_preview.png');
+    const biomeMapsDir = path.join(path.dirname(terrainPreviewPath), `biome_${previewBasename}`, 'biome_maps');
+
+    if (!fs.existsSync(biomeMapsDir)) {
+      return res.status(404).json({ success: false, error: 'Biome maps not found' });
+    }
+
+    // 3. Assets 경로
+    const assetsDir = path.join(process.cwd(), 'assets');
+
+    // 4. 오브젝트 배치 실행
+    console.log(`[API] Placing objects...`);
+    console.log(`  - Road blend: ${road.blendFilePath}`);
+    console.log(`  - Biome maps: ${biomeMapsDir}`);
+    console.log(`  - Assets: ${assetsDir}`);
+
+    const { placeObjectsOnTerrain } = await import('./services/blenderService');
+    const result = await placeObjectsOnTerrain(
+      road.blendFilePath,
+      biomeMapsDir,
+      assetsDir,
+      objectCount
+    );
+
+    console.log(`[API] ✅ Objects placed: ${result.placedCount}/${objectCount}`);
+
+    // 5. DB 업데이트 (metadata에 오브젝트 정보 저장)
+    await prisma.road.update({
+      where: { id: roadId },
+      data: {
+        metadata: {
+          ...(road.metadata as any),
+          hasObjects: true,
+          objectCount: result.placedCount
+        }
+      }
+    });
+
+    res.json({
+      success: true,
+      roadId,
+      objectCount: result.placedCount,
+      previewPath: road.previewPath
+    });
+  } catch (error: any) {
+    console.error(`[API] ❌ Object placement failed:`, error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Serve static files from React app (프로덕션 모드)
 app.use(express.static(path.join(__dirname, '../client/dist')));
 

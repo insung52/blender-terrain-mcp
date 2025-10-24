@@ -136,14 +136,40 @@ def main():
     if water_obj:
         log(f"✅ Water found: {water_obj.name} (using as-is)")
 
-    # GLTF Export (기본 설정)
+    # GLTF Export (GPU 인스턴싱 활성화)
     log("Exporting to GLTF...")
-    bpy.ops.export_scene.gltf(
-        filepath=output_glb_path,
-        export_format='GLB'
-    )
+    try:
+        bpy.ops.export_scene.gltf(
+            filepath=output_glb_path,
+            export_format='GLB',
+            export_gpu_instances=True,  # GPU 인스턴싱 활성화 (EXT_mesh_gpu_instancing)
+            export_apply=False,  # 모디파이어 적용 안함 (인스턴싱 유지)
+            use_visible=True,  # viewport에서 보이는 것만 익스포트
+            use_renderable=True  # 렌더링 가능한 것만 익스포트
+        )
 
-    log(f"✅ Export complete: {output_glb_path}")
+        log(f"✅ Export complete: {output_glb_path}")
+        log(f"   GPU Instancing: Enabled (EXT_mesh_gpu_instancing)")
+
+        # 파일이 실제로 생성되었는지 확인
+        if os.path.exists(output_glb_path):
+            file_size = os.path.getsize(output_glb_path) / (1024 * 1024)  # MB
+            log(f"   File size: {file_size:.2f} MB")
+        else:
+            log("⚠️ Warning: Output file not found, but export operation completed")
+
+    except Exception as e:
+        log(f"❌ Export failed: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+        sys.exit(0)  # 명시적으로 성공 코드 반환
+    except Exception as e:
+        log(f"❌ Script failed: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)

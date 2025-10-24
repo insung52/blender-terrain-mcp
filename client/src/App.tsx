@@ -219,6 +219,43 @@ function App() {
     }
   };
 
+  const addObjectsToRoad = async (roadId: string) => {
+    const count = prompt('배치할 나무 개수를 입력하세요 (권장: 100-200개)', '100');
+    if (!count) return;
+
+    const objectCount = parseInt(count);
+    if (isNaN(objectCount) || objectCount < 1 || objectCount > 1000) {
+      alert('1-1000 사이의 숫자를 입력하세요');
+      return;
+    }
+
+    const estimatedTime = Math.ceil(objectCount * 3 / 60);
+    if (!confirm(`${objectCount}개의 나무를 배치하시겠습니까? (예상 소요: ${estimatedTime}분)`)) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/road/${roadId}/add-objects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ objectCount })
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        alert(`✅ ${data.objectCount}개 오브젝트 배치 완료!`);
+        loadRoads(); // 목록 새로고침
+      } else {
+        alert('Failed to add objects: ' + data.error);
+      }
+    } catch (error: any) {
+      alert('Error: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const deleteRoad = async (roadId: string) => {
     if (!confirm('Are you sure you want to delete this road?')) {
       return;
@@ -664,15 +701,34 @@ function App() {
                 <div style={{
                   marginTop: '1rem',
                   display: 'flex',
-                  gap: '0.5rem'
+                  gap: '0.5rem',
+                  flexDirection: 'column'
                 }}>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      addObjectsToRoad(road.id);
+                    }}
+                    style={{
+                      padding: '0.5rem',
+                      backgroundColor: '#4CAF50',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '0.9em'
+                    }}
+                    disabled={loading}
+                  >
+                    🌲 오브젝트 생성
+                  </button>
+
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       deleteRoad(road.id);
                     }}
                     style={{
-                      flex: 1,
                       padding: '0.5rem',
                       backgroundColor: '#f44336',
                       color: 'white',
