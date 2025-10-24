@@ -30,34 +30,58 @@ model Job {
 }
 
 model Terrain {
-  id            String   @id @default(uuid())
-  jobId         String   @unique
-  job           Job      @relation(fields: [jobId], references: [id])
+  id            String    @id @default(uuid())
+  jobId         String    @unique
+  job           Job       @relation(fields: [jobId], references: [id])
   userId        String
-  description   String?  @db.Text
+  description   String?   @db.Text
   blendFilePath String
   topViewPath   String
   metadata      Json?
-  createdAt     DateTime @default(now())
+  createdAt     DateTime  @default(now())
   roads         Road[]
+  objects       Objects[]
 
   @@index([userId])
 }
 
 model Road {
-  id            String   @id @default(uuid())
-  jobId         String   @unique
-  job           Job      @relation(fields: [jobId], references: [id])
+  id            String    @id @default(uuid())
+  jobId         String    @unique
+  job           Job       @relation(fields: [jobId], references: [id])
   terrainId     String
-  terrain       Terrain  @relation(fields: [terrainId], references: [id])
+  terrain       Terrain   @relation(fields: [terrainId], references: [id])
   userId        String
   controlPoints Json
   blendFilePath String
   previewPath   String?
-  widthMeters   Float    @default(1.6)
+  widthMeters   Float     @default(1.6)
   metadata      Json?
+  createdAt     DateTime  @default(now())
+  objects       Objects[]
+
+  @@index([terrainId])
+  @@index([userId])
+}
+
+model Objects {
+  id            String   @id @default(uuid())
+  terrainId     String
+  terrain       Terrain  @relation(fields: [terrainId], references: [id])
+  roadId        String?
+  road          Road?    @relation(fields: [roadId], references: [id])
+  userId        String
+
+  blendFilePath String
+  previewPath   String
+  glbFilePath   String?
+
+  objectCount   Int
+  metadata      Json?    // 어떤 나무들이 배치되었는지, spawn config 등
+
   createdAt     DateTime @default(now())
 
   @@index([terrainId])
+  @@index([roadId])
   @@index([userId])
 }

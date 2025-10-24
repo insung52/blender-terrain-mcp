@@ -28,6 +28,7 @@ export async function exportToGLTF(
   blendFilePath: string,
   outputGlbPath: string
 ): Promise<{ success: boolean; glbPath: string }> {
+  const fs = require('fs');
   const scriptPath = path.join(config.blenderScriptsDir, 'export_gltf.py');
 
   const command = `"${config.blenderPath}" "${blendFilePath}" --background --python "${scriptPath}" -- "${outputGlbPath}"`;
@@ -45,6 +46,18 @@ export async function exportToGLTF(
 
     return { success: true, glbPath: outputGlbPath };
   } catch (error: any) {
+    // Blender가 경고(WARNING) 때문에 non-zero exit code를 반환할 수 있음
+    // 실제로 GLB 파일이 생성되었는지 확인
+    if (fs.existsSync(outputGlbPath)) {
+      const stats = fs.statSync(outputGlbPath);
+      if (stats.size > 0) {
+        console.log(`✅ GLB file exists (${(stats.size / 1024 / 1024).toFixed(2)} MB), treating as success despite warnings`);
+        console.log('Warning message:', error.message);
+        return { success: true, glbPath: outputGlbPath };
+      }
+    }
+
+    // 파일이 없거나 크기가 0이면 진짜 에러
     throw new Error(`GLTF export failed: ${error.message}`);
   }
 }
@@ -112,26 +125,26 @@ export async function generateBiomeTerrain(
 }
 
 /**
- * 지형에 오브젝트 배치 (나무 등)
+ * 지형에 오브젝트 배치 (나무 등) - 독립 blend 파일 생성
  */
 export async function placeObjectsOnTerrain(
-  roadBlendPath: string,
+  baseBlendPath: string,      // terrain 또는 road blend 파일
   biomeMapsDir: string,
   assetsDir: string,
-  objectCount: number = 1000
+  objectCount: number,
+  outputBlendPath: string,    // 새로운 독립 blend 파일
+  previewPath: string
 ): Promise<{ success: boolean; placedCount: number }> {
   const scriptPath = path.join(config.blenderScriptsDir, 'object_placer.py');
-  const outputBlendPath = roadBlendPath; // 같은 파일에 덮어쓰기
-  const previewPath = roadBlendPath.replace('.blend', '_preview.png');
 
-  const command = `"${config.blenderPath}" "${roadBlendPath}" --background --python "${scriptPath}" -- "${biomeMapsDir}" "${assetsDir}" ${objectCount} "${outputBlendPath}" "${previewPath}"`;
+  const command = `"${config.blenderPath}" "${baseBlendPath}" --background --python "${scriptPath}" -- "${biomeMapsDir}" "${assetsDir}" ${objectCount} "${outputBlendPath}" "${previewPath}"`;
 
   console.log(`🔄 Placing objects on terrain: ${command}`);
 
   try {
     const { stdout, stderr } = await execAsync(command, {
       maxBuffer: 20 * 1024 * 1024, // 20MB (많은 오브젝트 로그)
-      timeout: 60 * 60 * 1000,     // 60분 타임아웃 (1000개 오브젝트 처리)
+      timeout: 60 * 60 * 1000,     // 60분 타임아웃
     });
 
     console.log('Object Placer Output:', stdout);

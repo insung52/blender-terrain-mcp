@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import './App.css';
 import { simplifyDrawnPath } from './utils/simplifyPath';
+import { ObjectsGallery } from './components/ObjectsGallery';
 
 interface Terrain {
   id: string;
@@ -57,6 +58,8 @@ function App() {
   const [jobId, setJobId] = useState('');
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const [activeTab, setActiveTab] = useState<'terrain' | 'road' | 'objects'>('terrain');
 
   const API_URL = '';
 
@@ -219,43 +222,6 @@ function App() {
     }
   };
 
-  const addObjectsToRoad = async (roadId: string) => {
-    const count = prompt('배치할 나무 개수를 입력하세요 (권장: 100-200개)', '100');
-    if (!count) return;
-
-    const objectCount = parseInt(count);
-    if (isNaN(objectCount) || objectCount < 1 || objectCount > 1000) {
-      alert('1-1000 사이의 숫자를 입력하세요');
-      return;
-    }
-
-    const estimatedTime = Math.ceil(objectCount * 3 / 60);
-    if (!confirm(`${objectCount}개의 나무를 배치하시겠습니까? (예상 소요: ${estimatedTime}분)`)) {
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const response = await fetch(`${API_URL}/api/road/${roadId}/add-objects`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ objectCount })
-      });
-      const data = await response.json();
-
-      if (data.success) {
-        alert(`✅ ${data.objectCount}개 오브젝트 배치 완료!`);
-        loadRoads(); // 목록 새로고침
-      } else {
-        alert('Failed to add objects: ' + data.error);
-      }
-    } catch (error: any) {
-      alert('Error: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const deleteRoad = async (roadId: string) => {
     if (!confirm('Are you sure you want to delete this road?')) {
       return;
@@ -276,6 +242,46 @@ function App() {
       }
     } catch (error: any) {
       alert('Error: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createObjectsForRoad = async (road: any) => {
+    const countStr = prompt('배치할 오브젝트 개수를 입력하세요 (권장: 50-200)', '100');
+    if (!countStr) return;
+
+    const objectCount = parseInt(countStr);
+    if (isNaN(objectCount) || objectCount < 1) {
+      alert('올바른 숫자를 입력하세요!');
+      return;
+    }
+
+    const estimatedTime = Math.ceil(objectCount / 10);
+    if (!confirm(`${objectCount}개의 오브젝트를 배치하시겠습니까?\n예상 소요 시간: ${estimatedTime}분`)) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/objects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          terrainId: road.terrainId,
+          roadId: road.id,
+          objectCount
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        alert(`✅ ${data.objects.objectCount}개 오브젝트 배치 완료!\n\nObjects Gallery 탭에서 확인하세요.`);
+      } else {
+        alert(`❌ 오류: ${data.error}`);
+      }
+    } catch (error: any) {
+      alert(`❌ 오류: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -460,8 +466,68 @@ function App() {
     <div className="app">
       <h1>🏔️ Terrain Generator</h1>
 
-      {/* Terrain Section */}
-      <div className="section">
+      {/* 탭 네비게이션 */}
+      <div style={{
+        display: 'flex',
+        gap: '10px',
+        marginBottom: '20px',
+        borderBottom: '2px solid #444'
+      }}>
+        <button
+          onClick={() => setActiveTab('terrain')}
+          style={{
+            padding: '12px 24px',
+            background: activeTab === 'terrain' ? '#4CAF50' : '#2a2a2a',
+            color: '#fff',
+            border: 'none',
+            borderBottom: activeTab === 'terrain' ? '3px solid #4CAF50' : 'none',
+            cursor: 'pointer',
+            fontSize: '16px',
+            fontWeight: activeTab === 'terrain' ? 'bold' : 'normal'
+          }}
+        >
+          🏔️ Terrain Gallery
+        </button>
+        <button
+          onClick={() => setActiveTab('road')}
+          style={{
+            padding: '12px 24px',
+            background: activeTab === 'road' ? '#FF9800' : '#2a2a2a',
+            color: '#fff',
+            border: 'none',
+            borderBottom: activeTab === 'road' ? '3px solid #FF9800' : 'none',
+            cursor: 'pointer',
+            fontSize: '16px',
+            fontWeight: activeTab === 'road' ? 'bold' : 'normal'
+          }}
+        >
+          🛣️ Road Gallery
+        </button>
+        <button
+          onClick={() => setActiveTab('objects')}
+          style={{
+            padding: '12px 24px',
+            background: activeTab === 'objects' ? '#2196F3' : '#2a2a2a',
+            color: '#fff',
+            border: 'none',
+            borderBottom: activeTab === 'objects' ? '3px solid #2196F3' : 'none',
+            cursor: 'pointer',
+            fontSize: '16px',
+            fontWeight: activeTab === 'objects' ? 'bold' : 'normal'
+          }}
+        >
+          🌲 Objects Gallery
+        </button>
+      </div>
+
+      {/* Objects Gallery */}
+      {activeTab === 'objects' && <ObjectsGallery />}
+
+      {/* Terrain & Road Sections (기존 코드) */}
+      {activeTab !== 'objects' && (
+        <>
+          {/* Terrain Section */}
+          {activeTab === 'terrain' && <div className="section">
         <h2>1. Create Terrain</h2>
         <div className="form">
           <label>
@@ -514,10 +580,10 @@ function App() {
             {loading ? 'Creating...' : 'Create Terrain'}
           </button>
         </div>
-      </div>
+      </div>}
 
       {/* Terrain Gallery */}
-      <div className="section">
+      {activeTab === 'terrain' && <div className="section">
         <h2>2. Terrain Gallery</h2>
         {terrains.length === 0 ? (
           <p style={{ color: '#666', textAlign: 'center', padding: '2rem' }}>
@@ -641,10 +707,10 @@ function App() {
             ))}
           </div>
         )}
-      </div>
+      </div>}
 
       {/* Road Gallery */}
-      <div className="section">
+      {activeTab === 'road' && <div className="section">
         <h2>3. Road Gallery</h2>
         {roads.length === 0 ? (
           <p style={{ color: '#666', textAlign: 'center', padding: '2rem' }}>
@@ -707,7 +773,7 @@ function App() {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      addObjectsToRoad(road.id);
+                      createObjectsForRoad(road);
                     }}
                     style={{
                       padding: '0.5rem',
@@ -757,7 +823,7 @@ function App() {
             ))}
           </div>
         )}
-      </div>
+      </div>}
 
       {/* Road Modal */}
       {showRoadModal && (
@@ -1285,6 +1351,8 @@ function App() {
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }

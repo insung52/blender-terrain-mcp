@@ -20,6 +20,7 @@ import os
 import math
 import random
 import mathutils
+import json
 from PIL import Image
 
 # =============================================================================
@@ -192,45 +193,152 @@ def find_gltf_in_folder(folder_path):
 
 
 # =============================================================================
-# 4. 카테고리 결정 로직
+# 4. 나무 선택 로직 (확률 가중치 기반)
 # =============================================================================
 
-def determine_tree_category(temperature, humidity, continentalness, erosion, slope_angle):
+def load_object_spawn_config(script_dir):
+    """오브젝트 spawn 설정 파일 로드 (나무, 꽃, 바위 등)"""
+    config_path = os.path.join(script_dir, 'object_spawn_config.json')
+    with open(config_path, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+def is_in_range(value, range_tuple):
+    """값이 범위 내에 있는지 확인"""
+    min_val, max_val = range_tuple
+    return min_val <= value <= max_val
+
+def calculate_vegetation_density(temperature, humidity, continentalness, erosion, slope_angle):
     """
-    바이옴 파라미터 → tree 카테고리 매핑
+    바이옴 파라미터를 기반으로 식생 밀도를 계산 (0.0 ~ 1.0)
+
+    이 함수는 나무 배치 확률을 결정합니다.
+    나중에 공식을 쉽게 조정할 수 있도록 별도 함수로 분리되었습니다.
+
+    Args:
+        temperature: -1 ~ 1 (낮음 = 추움, 높음 = 더움)
+        humidity: 0 ~ 1 (낮음 = 건조, 높음 = 습함)
+        continentalness: 0 ~ 1 (낮음 = 바다, 높음 = 내륙)
+        erosion: 0 ~ 1 (낮음 = 평탄, 높음 = 침식됨)
+        slope_angle: 0 ~ 90 (각도, 경사도)
 
     Returns:
-        'general' | 'big' | 'tropical' | 'desert' | None
+        float: 0.0 ~ 1.0 (0 = 나무 없음, 1 = 최대 밀도)
     """
-    # ❌ 배치 불가 조건
-    if continentalness < -0.2:
-        return None  # 물 아래
 
-    if slope_angle > 45:
-        return None  # 너무 급경사
+    # 물 지역 제외 (continentalness가 매우 낮으면 바다/호수)
+    if continentalness < 0.2:
+        return 0.0
 
-    # 🌴 tropical (열대: 온도 높음 + 습도 높음)
-    if temperature > 0.5 and humidity > 0.6:
-        return 'tropical'
+    # 경사가 너무 가파르면 밀도 감소 (절벽에는 나무 적음)
+    if slope_angle > 50:
+        slope_factor = max(0.0, 1.0 - (slope_angle - 50) / 40.0)  # 50~90도: 1.0 -> 0.0
+    else:
+        slope_factor = 1.0
 
-    # 🌵 desert (사막: 온도 높음 + 습도 낮음)
-    if temperature > 0.5 and humidity < 0.3:
-        # 30% 확률로 배치
-        return 'desert' if random.random() < 0.3 else None
+    # 습도 영향 (나무는 물이 필요함) - 가장 큰 영향
+    humidity_factor = humidity  # 0~1
 
-    # 🌲 big (큰 나무: 평지 + 습함, 낮은 확률)
-    if humidity > 0.5 and erosion < 0.3 and slope_angle < 15:
-        # 5% 확률로 배치
-        if random.random() < 0.05:
-            return 'big'
+    # 온도 영향 (너무 춥거나 덥지 않은 중간 범위가 최적)
+    # temperature는 -1~1이므로, 0.2~0.5 범위가 최적이라고 가정
+    optimal_temp_center = 0.3
+    optimal_temp_range = 0.6
+    temp_distance = abs(temperature - optimal_temp_center) / optimal_temp_range
+    temp_factor = max(0.0, 1.0 - temp_distance)
 
-    # 🌳 general (기본 나무: 온대 기후)
-    if humidity > 0.4:
-        # 70% 확률로 배치
-        return 'general' if random.random() < 0.7 else None
+    # 침식 영향 (침식이 심하면 토양이 얇아서 나무 적음)
+    erosion_factor = max(0.1, 1.0 - erosion * 0.7)  # 침식이 심해도 최소 10%는 유지
 
-    # 기본: 배치 안함
-    return None
+    # 대륙성 영향 (내륙일수록 밀도 증가, 하지만 너무 극단적이지 않게)
+    continental_factor = min(1.0, continentalness * 1.2)
+
+    # 최종 밀도 계산 (가중 평균)
+    density = (
+        humidity_factor * 0.40 +      # 40% 영향 (가장 중요)
+        temp_factor * 0.25 +           # 25% 영향
+        erosion_factor * 0.15 +        # 15% 영향
+        slope_factor * 0.15 +          # 15% 영향
+        continental_factor * 0.05      # 5% 영향
+    )
+
+    # 0~1 범위로 클램핑
+    density = max(0.0, min(1.0, density))
+
+    return density
+
+def select_tree_by_probability(temperature, humidity, continentalness, erosion, slope_angle, trees_config, assets_dir):
+    """
+    현재 바이옴 파라미터에 따라 확률 가중치 기반으로 나무 선택
+
+    Returns:
+        (gltf_file_path, tree_config) | (None, None)
+    """
+    current_params = {
+        'temperature': temperature,
+        'humidity': humidity,
+        'continentalness': continentalness,
+        'erosion': erosion,
+        'slope_angle': slope_angle
+    }
+
+    # 1단계: 범위 필터링 (Hard Constraint)
+    valid_trees = []
+    for tree in trees_config['trees']:
+        is_valid = True
+        for param_name, value in current_params.items():
+            if param_name in tree['param_ranges']:
+                if not is_in_range(value, tree['param_ranges'][param_name]):
+                    is_valid = False
+                    break
+
+        if is_valid:
+            valid_trees.append(tree)
+
+    if not valid_trees:
+        return None, None  # 배치 불가
+
+    # 2단계: 중앙값과의 거리로 가중치 계산
+    weights = []
+    for tree in valid_trees:
+        distance_squared = 0
+
+        for param_name, value in current_params.items():
+            if param_name in tree['param_ranges']:
+                min_val, max_val = tree['param_ranges'][param_name]
+                center = (min_val + max_val) / 2.0  # 중앙값
+                range_size = max_val - min_val
+
+                if range_size > 0:
+                    # 중앙에서 멀수록 가중치 감소 (정규화된 거리)
+                    normalized_dist = abs(value - center) / (range_size / 2.0)
+                    distance_squared += normalized_dist ** 2
+
+        # 거리 가중치 + 기본 spawn_weight
+        weight = math.exp(-distance_squared * 0.5) * tree['spawn_weight']
+        weights.append((tree, weight))
+
+    # 3단계: 가중치 기반 랜덤 선택
+    total_weight = sum(w for _, w in weights)
+    if total_weight <= 0:
+        return None, None
+
+    rand_value = random.random() * total_weight
+    cumulative = 0
+
+    for tree, weight in weights:
+        cumulative += weight
+        if rand_value <= cumulative:
+            # GLTF 파일 경로 생성
+            category = tree['category']
+            gltf_relative = tree['gltf_path']
+            gltf_full_path = os.path.join(assets_dir, 'objects', 'tree', category, gltf_relative)
+
+            if os.path.exists(gltf_full_path):
+                return gltf_full_path, tree  # GLTF 경로와 tree 설정 반환
+            else:
+                log(f"⚠️ GLTF not found: {gltf_full_path}")
+                return None, None
+
+    return None, None
 
 
 # =============================================================================
@@ -271,7 +379,7 @@ def is_too_close_to_road(x, y, road_mesh, min_distance=2.0):
 # 같은 GLTF를 여러 번 임포트하면 용량 폭발 → 한 번만 임포트하고 복사 사용
 gltf_cache = {}
 
-def import_and_place_gltf(gltf_path, x, y, z, normal):
+def import_and_place_gltf(gltf_path, x, y, z, normal, tree_config):
     """
     GLTF 파일 임포트 후 지형에 배치 (캐싱 사용으로 용량 최적화)
 
@@ -279,6 +387,7 @@ def import_and_place_gltf(gltf_path, x, y, z, normal):
         gltf_path: GLTF 파일 경로
         x, y, z: 월드 좌표
         normal: 법선 벡터 (지형 경사)
+        tree_config: 나무 설정 (scale_range 포함)
     """
     global gltf_cache
 
@@ -297,11 +406,13 @@ def import_and_place_gltf(gltf_path, x, y, z, normal):
         # 캐시에 저장 (원본으로 사용)
         gltf_cache[gltf_path] = imported_objs
 
-        # 원본은 화면 밖으로 숨김
+        # 원본은 화면 밖으로 숨기고 익스포트에서 제외
         for obj in imported_objs:
             obj.location = (0, 0, -1000)
-            obj.hide_viewport = True
-            obj.hide_render = True
+            obj.hide_viewport = True  # 뷰포트에서 숨김
+            obj.hide_render = True    # 렌더링에서 제외
+            obj.hide_select = True    # 선택 불가
+            obj.hide_set(True)        # 완전히 숨김 (GLTF 익스포트에서도 제외)
 
     # 캐시된 원본 오브젝트들 중에서 랜덤으로 하나만 선택
     original_objs = gltf_cache[gltf_path]
@@ -324,6 +435,7 @@ def import_and_place_gltf(gltf_path, x, y, z, normal):
     # 복사본 보이기
     imported_obj.hide_viewport = False
     imported_obj.hide_render = False
+    imported_obj.hide_set(False)  # 완전히 보이게 (GLTF 익스포트에 포함)
 
     # 위치 설정
     imported_obj.location = (x, y, z)
@@ -350,8 +462,20 @@ def import_and_place_gltf(gltf_path, x, y, z, normal):
     # 랜덤 Z축 회전 (나무 방향 다양성)
     imported_obj.rotation_euler.z += random.uniform(0, 2 * math.pi)
 
-    # 랜덤 스케일 (0.8 ~ 1.2배)
-    scale_factor = random.uniform(0.8, 1.2)
+    # 랜덤 스케일 (tree_config의 scale_range 사용)
+    # 평균값 중심의 정규 분포로 스케일링 (가우시안 분포)
+    if 'scale_range' in tree_config:
+        min_scale, max_scale = tree_config['scale_range']
+        mean_scale = (min_scale + max_scale) / 2.0
+        std_dev = (max_scale - min_scale) / 4.0  # 99.7%가 범위 내에 들어오도록
+
+        # 정규 분포로 스케일 생성 (평균 근처에 더 많이 분포)
+        scale_factor = random.gauss(mean_scale, std_dev)
+        scale_factor = max(min_scale, min(max_scale, scale_factor))  # 범위 클램핑
+    else:
+        # scale_range가 없으면 기본값 사용
+        scale_factor = random.uniform(0.8, 1.2)
+
     imported_obj.scale = (scale_factor, scale_factor, scale_factor)
 
 
@@ -370,11 +494,13 @@ def main():
         log("❌ No biome maps found")
         sys.exit(1)
 
-    # 2. Assets 스캔
-    tree_assets = scan_tree_assets(ASSETS_DIR)
-    total_assets = sum(len(folders) for folders in tree_assets.values())
-    if total_assets == 0:
-        log("❌ No tree assets found")
+    # 2. Object spawn config 로드
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    try:
+        spawn_config = load_object_spawn_config(script_dir)
+        log(f"✅ Loaded {len(spawn_config['trees'])} tree configurations")
+    except Exception as e:
+        log(f"❌ Failed to load object spawn config: {e}")
         sys.exit(1)
 
     # 3. 지형 및 도로 메시 찾기
@@ -443,6 +569,7 @@ def main():
         'total_attempts': 0,
         'no_hit': 0,
         'too_close_to_road': 0,
+        'low_density': 0,           # 밀도가 낮아서 스킵
         'no_category': 0,
         'no_assets': 0,
         'no_gltf': 0,
@@ -506,39 +633,39 @@ def main():
         continentalness = read_biome_pixel(biome_maps, 'continentalness', x, y, terrain_size)
         erosion = read_biome_pixel(biome_maps, 'erosion', x, y, terrain_size)
 
-        # 카테고리 결정
-        category = determine_tree_category(
+        # 식생 밀도 계산 및 확률적 배치 결정
+        vegetation_density = calculate_vegetation_density(
             temperature, humidity, continentalness, erosion, slope_angle
         )
 
-        if category is None:
+        # 밀도 기반 확률 체크 (random.random()은 0~1 사이 값 반환)
+        # 예: density=0.7이면 70% 확률로 나무 배치 시도
+        if random.random() > vegetation_density:
+            # 이 위치는 밀도가 낮아서 스킵
+            debug_stats['low_density'] += 1
+            continue
+
+        # 확률 가중치 기반 나무 선택
+        gltf_file, tree_config = select_tree_by_probability(
+            temperature, humidity, continentalness, erosion, slope_angle,
+            spawn_config, ASSETS_DIR
+        )
+
+        if gltf_file is None:
             debug_stats['no_category'] += 1
             if debug_stats['total_attempts'] <= 10:
-                log(f"  Debug [attempt {attempt}]: No category (temp={temperature:.2f}, hum={humidity:.2f}, cont={continentalness:.2f}, slope={slope_angle:.1f}°)")
+                log(f"  Debug [attempt {attempt}]: No suitable tree (temp={temperature:.2f}, hum={humidity:.2f}, cont={continentalness:.2f}, slope={slope_angle:.1f}°)")
             continue  # 배치 안함
 
-        # 해당 카테고리의 랜덤 폴더 선택
-        if category not in tree_assets or len(tree_assets[category]) == 0:
-            debug_stats['no_assets'] += 1
-            log(f"  Debug [attempt {attempt}]: No assets for category '{category}'")
-            continue
-
-        tree_folder = random.choice(tree_assets[category])
-
-        # 폴더 내부의 GLTF 파일 찾기
-        gltf_file = find_gltf_in_folder(tree_folder)
-        if gltf_file is None:
-            debug_stats['no_gltf'] += 1
-            log(f"  Debug [attempt {attempt}]: No GLTF in folder {tree_folder}")
-            continue
-
-        # GLTF 임포트 및 배치
+        # GLTF 임포트 및 배치 (tree_config 전달)
         try:
-            import_and_place_gltf(gltf_file, x, y, z, normal)
+            import_and_place_gltf(gltf_file, x, y, z, normal, tree_config)
             debug_stats['success'] += 1
             placed_count += 1
             if placed_count <= 5:
-                log(f"  ✅ Placed {category} at ({x:.1f}, {y:.1f}, {z:.1f}) [#{placed_count}]")
+                tree_name = tree_config.get('name', os.path.basename(os.path.dirname(gltf_file)))
+                scale_range = tree_config.get('scale_range', [0.8, 1.2])
+                log(f"  ✅ Placed {tree_name} at ({x:.1f}, {y:.1f}, {z:.1f}) [scale: {scale_range[0]}-{scale_range[1]}] [#{placed_count}]")
         except Exception as e:
             debug_stats['import_failed'] += 1
             log(f"  ⚠️ Failed to place object: {e}")
@@ -549,9 +676,8 @@ def main():
     log(f"  Total attempts: {debug_stats['total_attempts']}")
     log(f"  No raycast hit: {debug_stats['no_hit']}")
     log(f"  Too close to road: {debug_stats['too_close_to_road']}")
-    log(f"  No category (biome rules): {debug_stats['no_category']}")
-    log(f"  No assets for category: {debug_stats['no_assets']}")
-    log(f"  No GLTF file found: {debug_stats['no_gltf']}")
+    log(f"  Low vegetation density: {debug_stats['low_density']}")
+    log(f"  No suitable tree (out of range): {debug_stats['no_category']}")
     log(f"  Import failed: {debug_stats['import_failed']}")
     log(f"  Success: {debug_stats['success']}")
 
@@ -576,13 +702,16 @@ def main():
         except Exception as e:
             log(f"⚠️ Failed to remove backup file: {e}")
 
-    # 8. 미리보기 렌더링
-    log(f"Rendering preview: {PREVIEW_PATH}")
-    scene.render.filepath = PREVIEW_PATH
-    scene.camera.location = (500, 500, 800)
-    scene.camera.rotation_euler = (0, 0, 0)
-    bpy.ops.render.render(write_still=True)
-    log("✅ Preview rendered")
+    # 8. 미리보기 렌더링 (선택적)
+    if PREVIEW_PATH and PREVIEW_PATH.strip():
+        log(f"Rendering preview: {PREVIEW_PATH}")
+        scene.render.filepath = PREVIEW_PATH
+        scene.camera.location = (500, 500, 800)
+        scene.camera.rotation_euler = (0, 0, 0)
+        bpy.ops.render.render(write_still=True)
+        log("✅ Preview rendered")
+    else:
+        log("⏭️ Skipping preview rendering (no preview path provided)")
 
     log("========================================")
     log(f"Object placement finished: {placed_count} objects")

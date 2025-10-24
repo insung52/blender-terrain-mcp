@@ -27,6 +27,7 @@ async function executeBlenderScript(scriptPath, outputPath) {
  * .blend 파일을 .glb (GLTF Binary)로 변환
  */
 async function exportToGLTF(blendFilePath, outputGlbPath) {
+    const fs = require('fs');
     const scriptPath = path_1.default.join(config_1.config.blenderScriptsDir, 'export_gltf.py');
     const command = `"${config_1.config.blenderPath}" "${blendFilePath}" --background --python "${scriptPath}" -- "${outputGlbPath}"`;
     console.log(`🔄 Exporting to GLTF: ${command}`);
@@ -41,6 +42,17 @@ async function exportToGLTF(blendFilePath, outputGlbPath) {
         return { success: true, glbPath: outputGlbPath };
     }
     catch (error) {
+        // Blender가 경고(WARNING) 때문에 non-zero exit code를 반환할 수 있음
+        // 실제로 GLB 파일이 생성되었는지 확인
+        if (fs.existsSync(outputGlbPath)) {
+            const stats = fs.statSync(outputGlbPath);
+            if (stats.size > 0) {
+                console.log(`✅ GLB file exists (${(stats.size / 1024 / 1024).toFixed(2)} MB), treating as success despite warnings`);
+                console.log('Warning message:', error.message);
+                return { success: true, glbPath: outputGlbPath };
+            }
+        }
+        // 파일이 없거나 크기가 0이면 진짜 에러
         throw new Error(`GLTF export failed: ${error.message}`);
     }
 }

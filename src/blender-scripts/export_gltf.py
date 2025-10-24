@@ -19,6 +19,10 @@ def bake_terrain_texture(terrain_obj, output_dir, terrain_id):
     """지형 텍스처 Baking (Shader Nodes → PNG)"""
     log("Starting terrain texture baking...")
 
+    # 디버깅: 현재 보이는 오브젝트 확인
+    visible_objects = [obj.name for obj in bpy.data.objects if not obj.hide_render]
+    log(f"🔍 Visible objects for baking: {visible_objects}")
+
     # CRITICAL: 모든 객체 deselect + 지형만 active
     bpy.ops.object.select_all(action='DESELECT')
     bpy.context.view_layer.objects.active = terrain_obj
@@ -119,7 +123,33 @@ def main():
     log(f"Input: {bpy.data.filepath}")
     log(f"Output: {output_glb_path}")
 
-    # 지형 객체 찾기
+    # 도로/물 객체 찾기
+    road_obj = bpy.data.objects.get("Road")
+    water_obj = bpy.data.objects.get("Water")
+
+    # 베이킹 전에 도로/물 숨기기 (지형만 베이킹하기 위해)
+    road_was_hidden = False
+    road_was_hidden_viewport = False
+    water_was_hidden = False
+    water_was_hidden_viewport = False
+
+    if road_obj:
+        log(f"✅ Road found: {road_obj.name}")
+        road_was_hidden = road_obj.hide_render
+        road_was_hidden_viewport = road_obj.hide_viewport
+        road_obj.hide_render = True  # 렌더링에서 제외
+        road_obj.hide_viewport = True  # 뷰포트에서 제외
+        road_obj.hide_set(True)  # 완전히 숨김 (베이킹에서도 제외)
+
+    if water_obj:
+        log(f"✅ Water found: {water_obj.name}")
+        water_was_hidden = water_obj.hide_render
+        water_was_hidden_viewport = water_obj.hide_viewport
+        water_obj.hide_render = True  # 렌더링에서 제외
+        water_obj.hide_viewport = True  # 뷰포트에서 제외
+        water_obj.hide_set(True)  # 완전히 숨김 (베이킹에서도 제외)
+
+    # 지형 객체 베이킹
     terrain_obj = bpy.data.objects.get("BiomeTerrain")
     if terrain_obj:
         log(f"✅ Terrain found: {terrain_obj.name}")
@@ -127,14 +157,18 @@ def main():
     else:
         log("⚠️ Terrain object 'BiomeTerrain' not found, skipping baking")
 
-    # 도로/물은 그대로 유지 (아무것도 안 함)
-    road_obj = bpy.data.objects.get("Road")
-    water_obj = bpy.data.objects.get("Water")
-
+    # 베이킹 후 도로/물 다시 표시 (원래 상태로 복원)
     if road_obj:
-        log(f"✅ Road found: {road_obj.name} (using as-is)")
+        road_obj.hide_render = road_was_hidden
+        road_obj.hide_viewport = road_was_hidden_viewport
+        road_obj.hide_set(False)  # 다시 보이게
+        log(f"✅ Road restored (using as-is)")
+
     if water_obj:
-        log(f"✅ Water found: {water_obj.name} (using as-is)")
+        water_obj.hide_render = water_was_hidden
+        water_obj.hide_viewport = water_was_hidden_viewport
+        water_obj.hide_set(False)  # 다시 보이게
+        log(f"✅ Water restored (using as-is)")
 
     # GLTF Export (GPU 인스턴싱 활성화)
     log("Exporting to GLTF...")

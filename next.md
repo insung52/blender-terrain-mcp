@@ -1,3 +1,10 @@
+object
+- 나무의 밀도를 조절? 나무 밀도 biome map 이미지 추가? 아니면 다른 파라미터를 이용해서 계산? 계산된 값으로 나무를 배치할지 말지 random 결정, false 면 반복문 continue 처럼 처리하는 방식
+- quiver tree 가 열대지방 나무인데, 왜 산과 평지의 중간쯤에 나오지? 차라리 물가 주변에 나오면 좋을듯. 지금 물가의 습도가 제대로 높게 설정되고있나?
+- 나무의 랜덤 회전 또는 랜덤 스케일 적용. 스케일은 범위를 json 파일에 추가해서 지정된 범위로만 스케일 걸리게. quiver tree 다른 나무에 비해 좀 작던데 기본을 2배로
+
+예상 소요시간
+
 서버 로그가 클라이언트 페이지에도 뜨게 수정하기
 
 
@@ -76,3 +83,13 @@ fbc20ea0-c466-46b4-9346-34f5a8c73288  이거의 preview 이미지랑 바이옴 �
 도로와 지형 메시 subdivision 으로 근접 디테일 향상
 
 & "C:\Program Files\Blender Foundation\Blender 4.5\blender.exe" --background --python "src/blender-scripts/biome_terrain_blender.py" -- "C:\graphics\blenderterrain\blender-terrain-mcp\output\biome_example\biome_maps" "C:\graphics\blenderterrain\blender-terrain-mcp\output\biome_example\terrain_params.json" "C:\graphics\blenderterrain\blender-terrain-mcp\output\test_biome_example.blend" "C:\graphics\blenderterrain\blender-terrain-mcp\output\test_biome_example_preview.png"
+
+
+
+
+
+에러
+
+mcp api 파이썬 스크립트 언어로 작동되게
+
+claude mcp 처럼
