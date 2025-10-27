@@ -1,17 +1,32 @@
 {
   "trees": [
     {
+      "name": "Cheiridopsis Succulent (Desert)",
+      "category": "desert",
+      "gltf_path": "cheiridopsis_succulent_1k/cheiridopsis_succulent_1k.gltf",
+      "param_ranges": {
+        "temperature": [0.4, 1.0],
+        "humidity": [0.0, 0.5],
+        "continentalness": [0.0, 0.8],
+        "erosion": [0.01, 0.8],
+        "slope_angle": [0, 40]
+      },
+      "spawn_weight": 0.6,
+      "scale_range": [1.5, 4.0],
+      "description": "사막 다육식물, 건조하고 더운 지역"
+    },
+    {
       "name": "General Tree (Small)",
       "category": "general",
       "gltf_path": "tree_small_02_1k/tree_small_02_1k.gltf",
       "param_ranges": {
         "temperature": [-0.3, 0.7],
-        "humidity": [0.3, 0.8],
+        "humidity": [0.4, 0.8],
         "continentalness": [0.0, 0.6],
         "erosion": [0.0, 0.6],
         "slope_angle": [0, 35]
       },
-      "spawn_weight": 1.0,
+      "spawn_weight": 0.8,
       "scale_range": [0.5, 2.0],
       "description": "일반적인 온대 기후 나무, 가장 흔함"
     },
@@ -50,30 +65,16 @@
       "category": "tropical",
       "gltf_path": "quiver_tree_02_1k/quiver_tree_02_1k.gltf",
       "param_ranges": {
-        "temperature": [0.4, 0.9],
-        "humidity": [0.6, 1.0],
+        "temperature": [0.4, 1.0],
+        "humidity": [0.65, 1.0],
         "continentalness": [-0.1, 0.35],
         "erosion": [0.0, 0.3],
         "slope_angle": [0, 20]
       },
-      "spawn_weight": 0.8,
+      "spawn_weight": 0.7,
       "scale_range": [2.0, 4.0],
       "description": "열대 야자수, 물가 근처 따뜻하고 습한 평지"
-    },
-    {
-      "name": "Cheiridopsis Succulent (Desert)",
-      "category": "desert",
-      "gltf_path": "cheiridopsis_succulent_1k/cheiridopsis_succulent_1k.gltf",
-      "param_ranges": {
-        "temperature": [0.4, 1.0],
-        "humidity": [0.0, 0.35],
-        "continentalness": [0.2, 0.8],
-        "erosion": [0.3, 0.8],
-        "slope_angle": [0, 40]
-      },
-      "spawn_weight": 0.6,
-      "scale_range": [0.5, 2.0],
-      "description": "사막 다육식물, 건조하고 더운 지역"
     }
+    
   ]
 }

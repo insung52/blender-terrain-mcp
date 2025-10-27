@@ -102,8 +102,8 @@ export const PRESET_BIOMES_V1: Record<string, BiomePreset> = {
     params: {
       temperature: 0.9,
       humidity: 0.1,
-      erosion: 0.3,
-      continentalness: 0.5,
+      erosion: 0.5,            // 🔧 0.3 → 0.5 (선인장 배치 가능하도록)
+      continentalness: 0.4,    // 🔧 0.5 → 0.4 (평지보다 0.1 낮춤)
       weirdness: 0.1,
       vegetation_color_r: 0.4,
       vegetation_color_g: 0.4,

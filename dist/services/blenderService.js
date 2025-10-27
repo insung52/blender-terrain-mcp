@@ -104,18 +104,18 @@ async function generateBiomeTerrain(biomeLayout, outputBlendPath, tempDir) {
     };
 }
 /**
- * 지형에 오브젝트 배치 (나무 등)
+ * 지형에 오브젝트 배치 (나무 등) - 독립 blend 파일 생성
  */
-async function placeObjectsOnTerrain(roadBlendPath, biomeMapsDir, assetsDir, objectCount = 1000) {
+async function placeObjectsOnTerrain(baseBlendPath, // terrain 또는 road blend 파일
+biomeMapsDir, assetsDir, objectCount, outputBlendPath, // 새로운 독립 blend 파일
+previewPath) {
     const scriptPath = path_1.default.join(config_1.config.blenderScriptsDir, 'object_placer.py');
-    const outputBlendPath = roadBlendPath; // 같은 파일에 덮어쓰기
-    const previewPath = roadBlendPath.replace('.blend', '_preview.png');
-    const command = `"${config_1.config.blenderPath}" "${roadBlendPath}" --background --python "${scriptPath}" -- "${biomeMapsDir}" "${assetsDir}" ${objectCount} "${outputBlendPath}" "${previewPath}"`;
+    const command = `"${config_1.config.blenderPath}" "${baseBlendPath}" --background --python "${scriptPath}" -- "${biomeMapsDir}" "${assetsDir}" ${objectCount} "${outputBlendPath}" "${previewPath}"`;
     console.log(`🔄 Placing objects on terrain: ${command}`);
     try {
         const { stdout, stderr } = await execAsync(command, {
             maxBuffer: 20 * 1024 * 1024, // 20MB (많은 오브젝트 로그)
-            timeout: 60 * 60 * 1000, // 60분 타임아웃 (1000개 오브젝트 처리)
+            timeout: 60 * 60 * 1000, // 60분 타임아웃
         });
         console.log('Object Placer Output:', stdout);
         if (stderr)

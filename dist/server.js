@@ -616,64 +616,183 @@ app.get('/api/road/:roadId/download-gltf', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
-// Road에 오브젝트 배치
-app.post('/api/road/:roadId/add-objects', async (req, res) => {
+// ============================================================
+// Objects API (독립 엔티티)
+// ============================================================
+// POST /api/objects - 새로운 오브젝트 생성
+app.post('/api/objects', async (req, res) => {
     try {
-        const { roadId } = req.params;
-        const { objectCount = 1000 } = req.body;
-        console.log(`[API] Adding objects to road: ${roadId}, count: ${objectCount}`);
-        // 1. Road 조회
-        const road = await client_1.prisma.road.findUnique({
-            where: { id: roadId },
-            include: { terrain: true }
+        const { terrainId, roadId, objectCount = 100, userId = 'test-user' } = req.body;
+        console.log(`[API] Creating objects: terrainId=${terrainId}, roadId=${roadId}, count=${objectCount}`);
+        // 1. Terrain 조회
+        const terrain = await client_1.prisma.terrain.findUnique({
+            where: { id: terrainId }
         });
-        if (!road || !road.blendFilePath) {
-            return res.status(404).json({ success: false, error: 'Road not found' });
+        if (!terrain) {
+            return res.status(404).json({ success: false, error: 'Terrain not found' });
         }
-        if (!road.terrain) {
-            return res.status(404).json({ success: false, error: 'Terrain not found for this road' });
+        // 2. Road 조회 (optional)
+        let baseBlendPath = terrain.blendFilePath;
+        if (roadId) {
+            const road = await client_1.prisma.road.findUnique({
+                where: { id: roadId }
+            });
+            if (road) {
+                baseBlendPath = road.blendFilePath;
+            }
         }
-        // 2. Biome maps 경로 찾기
-        const terrainPreviewPath = road.terrain.topViewPath;
-        if (!terrainPreviewPath) {
-            return res.status(404).json({ success: false, error: 'Terrain preview not found' });
-        }
-        // Biome maps 경로: output/biome_<terrain_id>/biome_maps
+        // 3. Biome maps 경로 찾기
+        const terrainPreviewPath = terrain.topViewPath;
         const previewBasename = path_1.default.basename(terrainPreviewPath, '_preview.png');
         const biomeMapsDir = path_1.default.join(path_1.default.dirname(terrainPreviewPath), `biome_${previewBasename}`, 'biome_maps');
         if (!fs_1.default.existsSync(biomeMapsDir)) {
             return res.status(404).json({ success: false, error: 'Biome maps not found' });
         }
-        // 3. Assets 경로
+        // 4. 출력 경로 생성
+        const objectsId = `objects_${Date.now()}`;
+        const outputBlendPath = path_1.default.join(outputDir, `${objectsId}.blend`);
         const assetsDir = path_1.default.join(process.cwd(), 'assets');
-        // 4. 오브젝트 배치 실행
+        // 5. 오브젝트 배치 실행 (프리뷰 없이)
         console.log(`[API] Placing objects...`);
-        console.log(`  - Road blend: ${road.blendFilePath}`);
+        console.log(`  - Base blend: ${baseBlendPath}`);
+        console.log(`  - Output blend: ${outputBlendPath}`);
         console.log(`  - Biome maps: ${biomeMapsDir}`);
-        console.log(`  - Assets: ${assetsDir}`);
         const { placeObjectsOnTerrain } = await Promise.resolve().then(() => __importStar(require('./services/blenderService')));
-        const result = await placeObjectsOnTerrain(road.blendFilePath, biomeMapsDir, assetsDir, objectCount);
+        const result = await placeObjectsOnTerrain(baseBlendPath, biomeMapsDir, assetsDir, objectCount, outputBlendPath, '' // 프리뷰 없음
+        );
         console.log(`[API] ✅ Objects placed: ${result.placedCount}/${objectCount}`);
-        // 5. DB 업데이트 (metadata에 오브젝트 정보 저장)
-        await client_1.prisma.road.update({
-            where: { id: roadId },
+        // 6. DB에 저장 (프리뷰 경로 없음)
+        const objects = await client_1.prisma.objects.create({
             data: {
+                terrainId,
+                roadId: roadId || null,
+                userId,
+                blendFilePath: outputBlendPath,
+                previewPath: '', // 프리뷰 없음
+                objectCount: result.placedCount,
                 metadata: {
-                    ...road.metadata,
-                    hasObjects: true,
-                    objectCount: result.placedCount
+                    requestedCount: objectCount,
+                    actualCount: result.placedCount
                 }
             }
         });
         res.json({
             success: true,
-            roadId,
-            objectCount: result.placedCount,
-            previewPath: road.previewPath
+            objects: {
+                id: objects.id,
+                terrainId: objects.terrainId,
+                roadId: objects.roadId,
+                objectCount: objects.objectCount,
+                previewPath: objects.previewPath,
+                createdAt: objects.createdAt
+            }
         });
     }
     catch (error) {
-        console.error(`[API] ❌ Object placement failed:`, error.message);
+        console.error(`[API] ❌ Objects creation failed:`, error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+// GET /api/objects - 오브젝트 목록 조회
+app.get('/api/objects', async (req, res) => {
+    try {
+        const { userId = 'test-user' } = req.query;
+        const objects = await client_1.prisma.objects.findMany({
+            where: { userId: userId },
+            include: {
+                terrain: { select: { id: true, description: true } },
+                road: { select: { id: true } }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+        res.json({ success: true, objects });
+    }
+    catch (error) {
+        console.error(`[API] ❌ Failed to fetch objects:`, error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+// GET /api/objects/:id/download - GLB 다운로드
+app.get('/api/objects/:id/download', async (req, res) => {
+    try {
+        const { id } = req.params;
+        console.log(`[API] Exporting objects to GLTF: ${id}`);
+        const objects = await client_1.prisma.objects.findUnique({
+            where: { id }
+        });
+        if (!objects || !objects.blendFilePath) {
+            return res.status(404).json({ success: false, error: 'Objects not found' });
+        }
+        // GLB 파일이 없으면 생성
+        let glbPath = objects.glbFilePath;
+        if (!glbPath || !fs_1.default.existsSync(glbPath)) {
+            glbPath = objects.blendFilePath.replace('.blend', '.glb');
+            const { exportToGLTF } = await Promise.resolve().then(() => __importStar(require('./services/blenderService')));
+            await exportToGLTF(objects.blendFilePath, glbPath);
+            // DB 업데이트
+            await client_1.prisma.objects.update({
+                where: { id },
+                data: { glbFilePath: glbPath }
+            });
+        }
+        console.log(`[API] ✅ GLB ready: ${glbPath}`);
+        res.download(glbPath);
+    }
+    catch (error) {
+        console.error(`[API] ❌ GLTF export failed:`, error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+// GET /api/objects/:id/download-blend - Blend 파일 다운로드
+app.get('/api/objects/:id/download-blend', async (req, res) => {
+    try {
+        const { id } = req.params;
+        console.log(`[API] Downloading blend file for objects: ${id}`);
+        const objects = await client_1.prisma.objects.findUnique({
+            where: { id }
+        });
+        if (!objects || !objects.blendFilePath) {
+            return res.status(404).json({ success: false, error: 'Objects not found' });
+        }
+        if (!fs_1.default.existsSync(objects.blendFilePath)) {
+            return res.status(404).json({ success: false, error: 'Blend file not found' });
+        }
+        console.log(`[API] ✅ Blend file ready: ${objects.blendFilePath}`);
+        res.download(objects.blendFilePath);
+    }
+    catch (error) {
+        console.error(`[API] ❌ Blend download failed:`, error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+// DELETE /api/objects/:id - 오브젝트 삭제
+app.delete('/api/objects/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const objects = await client_1.prisma.objects.findUnique({
+            where: { id }
+        });
+        if (!objects) {
+            return res.status(404).json({ success: false, error: 'Objects not found' });
+        }
+        // 파일 삭제
+        if (fs_1.default.existsSync(objects.blendFilePath)) {
+            fs_1.default.unlinkSync(objects.blendFilePath);
+        }
+        if (fs_1.default.existsSync(objects.previewPath)) {
+            fs_1.default.unlinkSync(objects.previewPath);
+        }
+        if (objects.glbFilePath && fs_1.default.existsSync(objects.glbFilePath)) {
+            fs_1.default.unlinkSync(objects.glbFilePath);
+        }
+        // DB 삭제
+        await client_1.prisma.objects.delete({
+            where: { id }
+        });
+        res.json({ success: true });
+    }
+    catch (error) {
+        console.error(`[API] ❌ Failed to delete objects:`, error.message);
         res.status(500).json({ success: false, error: error.message });
     }
 });
