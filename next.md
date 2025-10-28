@@ -1,3 +1,16 @@
+로그파일 안지워지고 남는거 다 제거하기
+
+terrain 생성할때 지금은 claude api 결과 나오고 나서 progress 팝업창 뜨는데, 그냥 generate terrain 시작하자 마자 progress 나오게 변경
+
+멀티 사용자 가능하게?
+
+바이옴 맵 이미지 생성되면 progress 에서 볼 수 있게 하기. (이미지 다? 아니면 하나만?)
+
+지형에 텍스쳐 적용
+
+readme 더 자세하게 (바이옴 파라미터, 이미지 맵 관련 설명 등등)
+
+
 
 
 object
