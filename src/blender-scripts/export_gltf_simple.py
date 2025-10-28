@@ -123,6 +123,60 @@ def main():
     else:
         log("No terrain objects found, skipping baking")
 
+    # 0,0,-1000 위치에 있는 숨겨진 원본 메시 삭제 (캐시용 오브젝트)
+    log("Debugging cache object detection...")
+
+    from mathutils import Vector
+    cache_location = Vector((0, 0, -1000))
+
+    all_mesh_objects = [obj for obj in bpy.data.objects if obj.type == 'MESH']
+    log(f"Total mesh objects: {len(all_mesh_objects)}")
+
+    at_cache_location = []
+    hidden_render = []
+    hidden_viewport = []
+    not_visible = []
+
+    for obj in all_mesh_objects:
+        dist = (obj.location - cache_location).length
+        log(f"  {obj.name}:")
+        log(f"    Location: {obj.location} (distance from cache: {dist:.4f})")
+        log(f"    hide_render: {obj.hide_render}")
+        log(f"    hide_viewport: {obj.hide_viewport}")
+        log(f"    visible_get(): {obj.visible_get()}")
+
+        if dist < 0.1:
+            at_cache_location.append(obj.name)
+        if obj.hide_render:
+            hidden_render.append(obj.name)
+        if obj.hide_viewport:
+            hidden_viewport.append(obj.name)
+        if not obj.visible_get():
+            not_visible.append(obj.name)
+
+    log(f"\nSummary:")
+    log(f"  At cache (0,0,-1000): {len(at_cache_location)} - {at_cache_location}")
+    log(f"  hide_render=True: {len(hidden_render)} - {hidden_render}")
+    log(f"  hide_viewport=True: {len(hidden_viewport)} - {hidden_viewport}")
+    log(f"  visible_get()=False: {len(not_visible)} - {not_visible}")
+
+    log("\nRemoving hidden cache objects at (0,0,-1000)...")
+    removed_count = 0
+    for obj in list(bpy.data.objects):
+        if obj.type == 'MESH':
+            # 0,0,-1000 근처에 있고 숨겨져 있거나 렌더링 안되는 오브젝트
+            dist_to_cache = (obj.location - cache_location).length
+            if (dist_to_cache < 0.1 and
+                (obj.hide_render or obj.hide_viewport or not obj.visible_get())):
+                log(f"  Removing: {obj.name} at {obj.location}")
+                bpy.data.objects.remove(obj, do_unlink=True)
+                removed_count += 1
+
+    if removed_count > 0:
+        log(f"✅ Removed {removed_count} cache object(s)")
+    else:
+        log(f"⚠️ No objects matched removal criteria")
+
     # GLTF Export
     log("Exporting to GLTF...")
     try:

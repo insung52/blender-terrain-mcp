@@ -29,11 +29,11 @@ export async function exportToGLTF(
   outputGlbPath: string
 ): Promise<{ success: boolean; glbPath: string }> {
   const fs = require('fs');
-  const scriptPath = path.join(config.blenderScriptsDir, 'export_gltf.py');
+  const scriptPath = path.join(config.blenderScriptsDir, 'export_gltf_simple.py');
 
   const command = `"${config.blenderPath}" "${blendFilePath}" --background --python "${scriptPath}" -- "${outputGlbPath}"`;
 
-  console.log(`🔄 Exporting to GLTF: ${command}`);
+  console.log(`🔄 Exporting to GLTF (simple): ${command}`);
 
   try {
     const { stdout, stderr } = await execAsync(command, {

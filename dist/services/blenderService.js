@@ -28,9 +28,9 @@ async function executeBlenderScript(scriptPath, outputPath) {
  */
 async function exportToGLTF(blendFilePath, outputGlbPath) {
     const fs = require('fs');
-    const scriptPath = path_1.default.join(config_1.config.blenderScriptsDir, 'export_gltf.py');
+    const scriptPath = path_1.default.join(config_1.config.blenderScriptsDir, 'export_gltf_simple.py');
     const command = `"${config_1.config.blenderPath}" "${blendFilePath}" --background --python "${scriptPath}" -- "${outputGlbPath}"`;
-    console.log(`🔄 Exporting to GLTF: ${command}`);
+    console.log(`🔄 Exporting to GLTF (simple): ${command}`);
     try {
         const { stdout, stderr } = await execAsync(command, {
             maxBuffer: 10 * 1024 * 1024,
