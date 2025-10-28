@@ -23,7 +23,7 @@ import mathutils
 import json
 
 # 🐛 DEBUG MODE: True이면 모든 시도마다 상세 로그 출력
-DEBUG_MODE = True
+DEBUG_MODE = False
 
 # 🔧 Pillow가 user site-packages에 설치되어 있는 경우 경로 추가
 user_site_packages = os.path.expanduser(
@@ -342,10 +342,10 @@ def calculate_vegetation_density(
     # 습도 영향 (나무는 물이 필요함) - 가장 큰 영향
     humidity_factor = humidity + 0.1  # 0~1
 
-    # 온도 영향 (너무 춥거나 덥지 않은 중간 범위가 최적)
-    # temperature는 -1~1이므로, 0.2~0.5 범위가 최적이라고 가정
+    # 온도 영향 (온대~열대까지 넓은 범위 허용)
+    # temperature는 -1~1이므로, -0.2~0.8 범위가 최적
     optimal_temp_center = 0.3
-    optimal_temp_range = 0.6
+    optimal_temp_range = 1.2  # 넓은 범위 (더운 정글도 OK)
     temp_distance = abs(temperature - optimal_temp_center) / optimal_temp_range
     temp_factor = max(0.0, 1.0 - temp_distance)
 
@@ -357,8 +357,8 @@ def calculate_vegetation_density(
 
     # 최종 밀도 계산 (가중 평균)
     density = (
-        humidity_factor * 0.45  # 25% 영향
-        + temp_factor * 0.25  # 25% 영향
+        humidity_factor * 0.55  # 25% 영향
+        + temp_factor * 0.15  # 25% 영향
         + erosion_factor * 0.15  # 15% 영향
         + slope_factor * 0.15  # 15% 영향
         + continental_factor * 0.05  # 5% 영향
@@ -853,7 +853,9 @@ def main():
             if DEBUG_MODE:
                 log(f"  ❌ SKIP: No object type selected")
             continue
-
+        if selected_type == "trees":
+            z -=0.1
+        
         if DEBUG_MODE:
             log(f"  🎲 Selected object type: {selected_type}")
 
