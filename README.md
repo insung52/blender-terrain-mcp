@@ -229,31 +229,6 @@ Edit object spawn configuration to match your asset names:
 
 ## 🎯 Running the Application
 
-### Development Mode
-
-**Terminal 1 - Redis:**
-```bash
-redis-server
-```
-
-**Terminal 2 - Backend:**
-```bash
-npm run dev
-```
-
-**Terminal 3 - Frontend:**
-```bash
-cd client
-npm run dev
-```
-
-**Terminal 4 - Queue Worker:**
-```bash
-npm run worker
-```
-
-Access application at: `http://localhost:5173`
-
 ### Production Mode
 
 **Build:**
