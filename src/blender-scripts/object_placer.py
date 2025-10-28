@@ -22,6 +22,9 @@ import random
 import mathutils
 import json
 
+# 🐛 DEBUG MODE: True이면 모든 시도마다 상세 로그 출력
+DEBUG_MODE = True
+
 # 🔧 Pillow가 user site-packages에 설치되어 있는 경우 경로 추가
 user_site_packages = os.path.expanduser(
     "~\\AppData\\Roaming\\Python\\Python311\\site-packages"
@@ -35,11 +38,39 @@ from PIL import Image
 # 로그 함수
 # =============================================================================
 
+# 로그 파일 핸들러 (전역)
+log_file = None
+
+
+def init_log_file(output_blend_path):
+    """로그 파일 초기화"""
+    global log_file
+    # output_blend 파일 이름에서 로그 파일명 생성
+    log_path = output_blend_path.replace('.blend', '_log.txt')
+    log_file = open(log_path, 'w', encoding='utf-8')
+    log(f"Log file created: {log_path}")
+
+
+def close_log_file():
+    """로그 파일 닫기"""
+    global log_file
+    if log_file:
+        log_file.close()
+        log_file = None
+
 
 def log(msg):
-    """콘솔 출력"""
-    print(f"[Object Placer] {msg}")
+    """콘솔 및 파일 출력 (실시간)"""
+    log_msg = f"[Object Placer] {msg}"
+
+    # 콘솔 출력
+    print(log_msg)
     sys.stdout.flush()
+
+    # 파일 출력 (실시간)
+    if log_file:
+        log_file.write(log_msg + "\n")
+        log_file.flush()  # 즉시 디스크에 기록
 
 
 # =============================================================================
@@ -64,11 +95,14 @@ OBJECT_COUNT = int(argv[2])
 OUTPUT_BLEND = argv[3]
 PREVIEW_PATH = argv[4]
 
+
+
 log(f"Biome maps: {BIOME_MAPS_DIR}")
 log(f"Assets: {ASSETS_DIR}")
 log(f"Object count: {OBJECT_COUNT}")
 log(f"Output: {OUTPUT_BLEND}")
 log(f"Preview: {PREVIEW_PATH}")
+log(f"🐛 DEBUG MODE: {DEBUG_MODE}")
 
 
 # =============================================================================
@@ -145,7 +179,8 @@ def read_biome_pixel(biome_maps, param_name, x, y, terrain_size=1000):
     biome_x = x + 500  # -500~500 → 0~1000
     biome_y = y + 500
     img_x = int((biome_x / terrain_size) * width)
-    img_y = int((biome_y / terrain_size) * height)
+    # Y축 반전: 월드 +y(위) → 이미지 0(위), 월드 -y(아래) → 이미지 999(아래)
+    img_y = height - 1 - int((biome_y / terrain_size) * height)
 
     # 경계 체크
     img_x = max(0, min(width - 1, img_x))
@@ -157,13 +192,19 @@ def read_biome_pixel(biome_maps, param_name, x, y, terrain_size=1000):
     # 역정규화
     if param_name in ["temperature", "continentalness"]:
         # -1.0 ~ 1.0
-        return (pixel_value / 65535.0) * 2.0 - 1.0
+        normalized_value = (pixel_value / 65535.0) * 2.0 - 1.0
     elif param_name == "snow_start_height":
         # 0 ~ 5000
-        return (pixel_value / 65535.0) * 5000.0
+        normalized_value = (pixel_value / 65535.0) * 5000.0
     else:
         # 0.0 ~ 1.0
-        return pixel_value / 65535.0
+        normalized_value = pixel_value / 65535.0
+
+    # 🐛 DEBUG: 픽셀 읽기 상세 정보
+    if DEBUG_MODE and param_name in ["temperature", "humidity"]:
+        log(f"    🔍 read_biome_pixel({param_name}): world({x:.1f}, {y:.1f}) → img({img_x}, {img_y}) → raw={pixel_value} → value={normalized_value:.3f}")
+
+    return normalized_value
 
 
 # =============================================================================
@@ -228,6 +269,39 @@ def load_object_spawn_config(script_dir):
         return json.load(f)
 
 
+def select_object_type(spawn_config):
+    """
+    타입별 가중치로 오브젝트 타입 선택 (trees, flowers, rocks 등)
+
+    Returns:
+        str: 선택된 타입 키 (예: 'trees', 'flowers')
+    """
+    types = []
+    weights = []
+
+    for obj_type, config in spawn_config.items():
+        if "type_weight" in config:
+            types.append(obj_type)
+            weights.append(config["type_weight"])
+
+    if not types:
+        return None
+
+    total_weight = sum(weights)
+    if total_weight <= 0:
+        return None
+
+    rand_value = random.random() * total_weight
+    cumulative = 0
+
+    for obj_type, weight in zip(types, weights):
+        cumulative += weight
+        if rand_value <= cumulative:
+            return obj_type
+
+    return types[0]  # fallback
+
+
 def is_in_range(value, range_tuple):
     """값이 범위 내에 있는지 확인"""
     min_val, max_val = range_tuple
@@ -255,8 +329,9 @@ def calculate_vegetation_density(
     """
 
     # 물 지역 제외 (continentalness가 매우 낮으면 바다/호수)
-    if continentalness < 0.2:
-        return 0.0
+    # 참고: z < 0.1 체크로 이미 물은 필터링되므로 이 체크는 불필요
+    # if continentalness < 0.2:
+    #     return 0.0
 
     # 경사가 너무 가파르면 밀도 감소 (절벽에는 나무 적음)
     if slope_angle > 50:
@@ -282,7 +357,7 @@ def calculate_vegetation_density(
 
     # 최종 밀도 계산 (가중 평균)
     density = (
-        humidity_factor * 0.25  # 25% 영향
+        humidity_factor * 0.45  # 25% 영향
         + temp_factor * 0.25  # 25% 영향
         + erosion_factor * 0.15  # 15% 영향
         + slope_factor * 0.15  # 15% 영향
@@ -295,20 +370,25 @@ def calculate_vegetation_density(
     return density
 
 
-def select_tree_by_probability(
+def select_object_by_probability(
     temperature,
     humidity,
     continentalness,
     erosion,
     slope_angle,
-    trees_config,
+    objects_list,
+    object_type,
     assets_dir,
 ):
     """
-    현재 바이옴 파라미터에 따라 확률 가중치 기반으로 나무 선택
+    현재 바이옴 파라미터에 따라 확률 가중치 기반으로 오브젝트 선택
+
+    Args:
+        objects_list: 오브젝트 리스트 (spawn_config['trees']['items'] 등)
+        object_type: 오브젝트 타입 ('trees', 'flowers' 등)
 
     Returns:
-        (gltf_file_path, tree_config) | (None, None)
+        (gltf_file_path, object_config) | (None, None)
     """
     current_params = {
         "temperature": temperature,
@@ -319,71 +399,114 @@ def select_tree_by_probability(
     }
 
     # 1단계: 범위 필터링 (Hard Constraint)
-    valid_trees = []
-    for tree in trees_config["trees"]:
+    valid_objects = []
+    for obj in objects_list:
         is_valid = True
+        failed_param = None
+        failed_value = None
+        failed_range = None
+
         for param_name, value in current_params.items():
-            if param_name in tree["param_ranges"]:
-                if not is_in_range(value, tree["param_ranges"][param_name]):
+            if param_name in obj["param_ranges"]:
+                if not is_in_range(value, obj["param_ranges"][param_name]):
                     is_valid = False
+                    failed_param = param_name
+                    failed_value = value
+                    failed_range = obj["param_ranges"][param_name]
                     break
 
         if is_valid:
-            valid_trees.append(tree)
+            valid_objects.append(obj)
+            if DEBUG_MODE:
+                log(f"      ✅ {obj['name']}: PASSED all range checks")
+        else:
+            if DEBUG_MODE:
+                log(f"      ❌ {obj['name']}: FILTERED by {failed_param}={failed_value:.3f} not in {failed_range}")
 
-    if not valid_trees:
+    if not valid_objects:
+        if DEBUG_MODE:
+            log(f"    ❌ No valid objects after range filtering")
         return None, None  # 배치 불가
 
-    # 2단계: 중앙값과의 거리로 가중치 계산
-    weights = []
-    for tree in valid_trees:
-        distance_squared = 0
+    # 2단계: 중앙값과의 거리로 가중치 계산 (온도/습도만, 선형)
+    if DEBUG_MODE:
+        log(f"    🎲 Calculating weights for {len(valid_objects)} valid objects...")
 
-        for param_name, value in current_params.items():
-            if param_name in tree["param_ranges"]:
-                min_val, max_val = tree["param_ranges"][param_name]
+    weights = []
+    for obj in valid_objects:
+        # 선형 거리 가중치: 중앙 = 100%, 최소/최대 = 50%
+        distance_penalty = 0.0
+
+        # 온도/습도만 거리 가중치 적용 (다른 파라미터는 Hard Constraint만)
+        for param_name in ["temperature", "humidity"]:
+            if param_name in obj["param_ranges"]:
+                value = current_params[param_name]
+                min_val, max_val = obj["param_ranges"][param_name]
                 center = (min_val + max_val) / 2.0  # 중앙값
                 range_size = max_val - min_val
 
                 if range_size > 0:
-                    # 중앙에서 멀수록 가중치 감소 (정규화된 거리)
+                    # 중앙에서의 정규화된 거리 (0~1)
+                    # center에서 0, min/max에서 1
                     normalized_dist = abs(value - center) / (range_size / 2.0)
-                    distance_squared += normalized_dist**2
+                    # 선형 페널티: 0 → 0%, 1 → 50% 감소
+                    penalty = normalized_dist * 0.5
+                    distance_penalty += penalty
 
-        # 거리 가중치 + 기본 spawn_weight
-        weight = math.exp(-distance_squared * 0.5) * tree["spawn_weight"]
-        weights.append((tree, weight))
+                    if DEBUG_MODE:
+                        log(f"      📐 {obj['name']}: {param_name}={value:.3f}, range=[{min_val:.2f},{max_val:.2f}], center={center:.2f}, dist={normalized_dist:.3f}, penalty={penalty:.3f}")
+
+        # 평균 페널티 (온도와 습도 두 개면 평균)
+        if distance_penalty > 0:
+            distance_penalty /= 2.0  # 두 파라미터 평균
+
+        # 선형 가중치: 1.0 (중앙) → 0.5 (최소/최대)
+        distance_weight = 1.0 - distance_penalty
+
+        # 최종 가중치 = 거리 가중치 * spawn_weight
+        weight = distance_weight * obj["spawn_weight"]
+        weights.append((obj, weight))
+
+        if DEBUG_MODE:
+            log(f"      🎯 {obj['name']}: distance_weight={distance_weight:.3f}, spawn_weight={obj['spawn_weight']}, final_weight={weight:.3f}")
 
     # 3단계: 가중치 기반 랜덤 선택
     total_weight = sum(w for _, w in weights)
     if total_weight <= 0:
+        if DEBUG_MODE:
+            log(f"    ❌ Total weight is 0, cannot select")
         return None, None
 
-    # 🔍 DEBUG: 가중치 출력
-    log(f"🎲 Tree selection weights:")
-    for tree, weight in weights:
-        probability = (weight / total_weight) * 100
-        log(f"  - {tree['name']}: weight={weight:.4f}, probability={probability:.2f}%")
+    if DEBUG_MODE:
+        log(f"    🎲 Total weight: {total_weight:.3f}")
+        for obj, weight in weights:
+            probability = (weight / total_weight) * 100
+            log(f"      - {obj['name']}: probability={probability:.1f}%")
 
     rand_value = random.random() * total_weight
     cumulative = 0
 
-    for tree, weight in weights:
+    if DEBUG_MODE:
+        log(f"    🎲 Random roll: {rand_value:.3f}")
+
+    for obj, weight in weights:
         cumulative += weight
         if rand_value <= cumulative:
             # GLTF 파일 경로 생성
-            category = tree["category"]
-            gltf_relative = tree["gltf_path"]
+            category = obj["category"]
+            gltf_relative = obj["gltf_path"]
+
+            # object_type에 따라 폴더 이름 결정 (trees → tree, flowers → flower)
+            folder_name = object_type.rstrip('s')  # 's' 제거 (trees→tree, flowers→flower)
             gltf_full_path = os.path.join(
-                assets_dir, "objects", "tree", category, gltf_relative
+                assets_dir, "objects", folder_name, category, gltf_relative
             )
 
-            log(
-                f"🎯 Selected: {tree['name']} (rand={rand_value:.4f}, cumulative={cumulative:.4f})"
-            )
+            if DEBUG_MODE:
+                log(f"    ✅ SELECTED: {obj['name']} (cumulative={cumulative:.3f})")
 
             if os.path.exists(gltf_full_path):
-                return gltf_full_path, tree  # GLTF 경로와 tree 설정 반환
+                return gltf_full_path, obj  # GLTF 경로와 object 설정 반환
             else:
                 log(f"⚠️ GLTF not found: {gltf_full_path}")
                 return None, None
@@ -430,8 +553,10 @@ def is_too_close_to_road(x, y, road_mesh, min_distance=2.0):
 # 같은 GLTF를 여러 번 임포트하면 용량 폭발 → 한 번만 임포트하고 복사 사용
 gltf_cache = {}
 
+# skeletal 로 여러개 나무를 파라미터로 변형 및 여러 종류로
+# geometry 를 하나로 공유?
 
-def import_and_place_gltf(gltf_path, x, y, z, normal, tree_config):
+def import_and_place_gltf(gltf_path, x, y, z, normal, obj_config):
     """
     GLTF 파일 임포트 후 지형에 배치 (캐싱 사용으로 용량 최적화)
 
@@ -439,7 +564,7 @@ def import_and_place_gltf(gltf_path, x, y, z, normal, tree_config):
         gltf_path: GLTF 파일 경로
         x, y, z: 월드 좌표
         normal: 법선 벡터 (지형 경사)
-        tree_config: 나무 설정 (scale_range 포함)
+        obj_config: 오브젝트 설정 (scale_range, full_rotation 등)
     """
     global gltf_cache
 
@@ -492,34 +617,26 @@ def import_and_place_gltf(gltf_path, x, y, z, normal, tree_config):
     # 위치 설정
     imported_obj.location = (x, y, z)
 
-    # 법선 벡터에 맞춰 회전 (지형 경사에 정렬)
-    z_axis = normal
-    x_axis = mathutils.Vector((1, 0, 0))
+    # 회전 설정 (오브젝트 타입에 따라 다름)
+    # CRITICAL: rotation_mode를 Euler로 변경 (Quaternion이면 rotation_euler이 무시됨)
+    imported_obj.rotation_mode = 'XYZ'
 
-    # Z축이 수직에 가까우면 기본 회전 사용
-    if abs(z_axis.z) > 0.99:
-        imported_obj.rotation_euler = (0, 0, 0)
+    # full_rotation 속성이 있으면 전방향 랜덤 회전 (바위용)
+    if obj_config.get("full_rotation", False):
+        # X, Y, Z 모두 랜덤 회전
+        random_x = random.uniform(0, 2 * math.pi)
+        random_y = random.uniform(0, 2 * math.pi)
+        random_z = random.uniform(0, 2 * math.pi)
+        imported_obj.rotation_euler = (random_x, random_y, random_z)
     else:
-        y_axis = z_axis.cross(x_axis).normalized()
-        x_axis = y_axis.cross(z_axis).normalized()
+        # Z축만 랜덤 회전 (나무, 꽃용 - 수직 유지)
+        random_z_rotation = random.uniform(0, 2 * math.pi)
+        imported_obj.rotation_euler = (0, 0, random_z_rotation)
 
-        rotation_matrix = mathutils.Matrix(
-            [
-                [x_axis.x, y_axis.x, z_axis.x],
-                [x_axis.y, y_axis.y, z_axis.y],
-                [x_axis.z, y_axis.z, z_axis.z],
-            ]
-        ).transposed()
-
-        imported_obj.rotation_euler = rotation_matrix.to_euler()
-
-    # 랜덤 Z축 회전 (나무 방향 다양성)
-    imported_obj.rotation_euler.z += random.uniform(0, 2 * math.pi)
-
-    # 랜덤 스케일 (tree_config의 scale_range 사용)
+    # 랜덤 스케일 (obj_config의 scale_range 사용)
     # 평균값 중심의 정규 분포로 스케일링 (가우시안 분포)
-    if "scale_range" in tree_config:
-        min_scale, max_scale = tree_config["scale_range"]
+    if "scale_range" in obj_config:
+        min_scale, max_scale = obj_config["scale_range"]
         mean_scale = (min_scale + max_scale) / 2.0
         std_dev = (max_scale - min_scale) / 4.0  # 99.7%가 범위 내에 들어오도록
 
@@ -539,6 +656,9 @@ def import_and_place_gltf(gltf_path, x, y, z, normal, tree_config):
 
 
 def main():
+    # 로그 파일 초기화
+    init_log_file(OUTPUT_BLEND)
+
     log("========================================")
     log("Starting object placement...")
     log("========================================")
@@ -547,13 +667,18 @@ def main():
     biome_maps = load_biome_maps(BIOME_MAPS_DIR)
     if len(biome_maps) == 0:
         log("❌ No biome maps found")
+        close_log_file()
         sys.exit(1)
 
     # 2. Object spawn config 로드
     script_dir = os.path.dirname(os.path.abspath(__file__))
     try:
         spawn_config = load_object_spawn_config(script_dir)
-        log(f"✅ Loaded {len(spawn_config['trees'])} tree configurations")
+        total_configs = sum(len(config.get('items', [])) for config in spawn_config.values())
+        log(f"✅ Loaded {total_configs} object configurations:")
+        for obj_type, config in spawn_config.items():
+            if 'items' in config and 'type_weight' in config:
+                log(f"  - {obj_type}: {len(config['items'])} items, type_weight={config['type_weight']}")
     except Exception as e:
         log(f"❌ Failed to load object spawn config: {e}")
         sys.exit(1)
@@ -631,7 +756,7 @@ def main():
     }
 
     # 목표 개수에 도달할 때까지 계속 시도 (최대 시도 횟수 제한)
-    max_attempts = OBJECT_COUNT * 10  # 최대 10배까지 시도
+    max_attempts = OBJECT_COUNT * 30  # 최대 10배까지 시도
     attempt = 0
 
     while placed_count < OBJECT_COUNT and attempt < max_attempts:
@@ -648,6 +773,11 @@ def main():
         x = random.uniform(terrain_min, terrain_max)
         y = random.uniform(terrain_min, terrain_max)
 
+        # 🐛 DEBUG: 시도 시작
+        if DEBUG_MODE:
+            log(f"")
+            log(f"🔍 [Attempt {attempt}] Starting at world position ({x:.2f}, {y:.2f})")
+
         # Raycast로 지형 정보 찾기
         origin = mathutils.Vector((x, y, 1000))
         direction = mathutils.Vector((0, 0, -1))
@@ -656,10 +786,8 @@ def main():
 
         if not hit:
             debug_stats["no_hit"] += 1
-            if debug_stats["total_attempts"] <= 10:
-                log(
-                    f"  Debug [attempt {attempt}]: No raycast hit at ({x:.1f}, {y:.1f})"
-                )
+            if DEBUG_MODE:
+                log(f"  ❌ SKIP: No raycast hit")
             continue  # 지형 없음
 
         z = location.z
@@ -667,24 +795,26 @@ def main():
         # 물 위 배치 방지 (z < 0.1)
         if z < 0.1:
             debug_stats["no_hit"] += 1  # 물로 간주
-            if debug_stats["total_attempts"] <= 10:
-                log(
-                    f"  Debug [attempt {attempt}]: Water area at ({x:.1f}, {y:.1f}, z={z:.2f})"
-                )
+            if DEBUG_MODE:
+                log(f"  ❌ SKIP: Water area (z={z:.3f})")
             continue
 
         slope_angle = math.degrees(math.acos(max(-1, min(1, normal.z))))
 
+        if DEBUG_MODE:
+            log(f"  ✅ Hit terrain at z={z:.2f}, slope={slope_angle:.1f}°, normal=({normal.x:.3f}, {normal.y:.3f}, {normal.z:.3f})")
+
         # 도로 충돌 체크
         if is_too_close_to_road(x, y, road_obj, min_distance=2.0):
             debug_stats["too_close_to_road"] += 1
-            if debug_stats["total_attempts"] <= 10:
-                log(
-                    f"  Debug [attempt {attempt}]: Too close to road at ({x:.1f}, {y:.1f})"
-                )
+            if DEBUG_MODE:
+                log(f"  ❌ SKIP: Too close to road")
             continue
 
         # Biome 파라미터 읽기
+        if DEBUG_MODE:
+            log(f"  📊 Reading biome parameters...")
+
         temperature = read_biome_pixel(biome_maps, "temperature", x, y, terrain_size)
         humidity = read_biome_pixel(biome_maps, "humidity", x, y, terrain_size)
         continentalness = read_biome_pixel(
@@ -692,53 +822,89 @@ def main():
         )
         erosion = read_biome_pixel(biome_maps, "erosion", x, y, terrain_size)
 
+        if DEBUG_MODE:
+            log(f"  📊 Biome params: temp={temperature:.3f}, humidity={humidity:.3f}, continentalness={continentalness:.3f}, erosion={erosion:.3f}")
+
         # 식생 밀도 계산 및 확률적 배치 결정
         vegetation_density = calculate_vegetation_density(
             temperature, humidity, continentalness, erosion, slope_angle
         )
 
+        if DEBUG_MODE:
+            log(f"  🌱 Vegetation density: {vegetation_density:.3f}")
+
         # 밀도 기반 확률 체크 (random.random()은 0~1 사이 값 반환)
-        # 예: density=0.7이면 70% 확률로 나무 배치 시도
-        if random.random() > vegetation_density:
+        # 예: density=0.7이면 70% 확률로 배치 시도
+        density_roll = random.random()
+        if density_roll > vegetation_density:
             # 이 위치는 밀도가 낮아서 스킵
             debug_stats["low_density"] += 1
+            if DEBUG_MODE:
+                log(f"  ❌ SKIP: Low density (roll={density_roll:.3f} > {vegetation_density:.3f})")
             continue
 
-        # 확률 가중치 기반 나무 선택
-        gltf_file, tree_config = select_tree_by_probability(
+        if DEBUG_MODE:
+            log(f"  ✅ Passed density check (roll={density_roll:.3f} <= {vegetation_density:.3f})")
+
+        # 1단계: 오브젝트 타입 선택 (trees, flowers 등)
+        selected_type = select_object_type(spawn_config)
+        if selected_type is None:
+            debug_stats["no_category"] += 1
+            if DEBUG_MODE:
+                log(f"  ❌ SKIP: No object type selected")
+            continue
+
+        if DEBUG_MODE:
+            log(f"  🎲 Selected object type: {selected_type}")
+
+        # 2단계: 선택된 타입 내에서 구체적인 오브젝트 선택
+        objects_list = spawn_config[selected_type].get("items", [])
+
+        if DEBUG_MODE:
+            log(f"  🔍 Selecting from {len(objects_list)} {selected_type} items...")
+
+        gltf_file, obj_config = select_object_by_probability(
             temperature,
             humidity,
             continentalness,
             erosion,
             slope_angle,
-            spawn_config,
+            objects_list,
+            selected_type,
             ASSETS_DIR,
         )
 
         if gltf_file is None:
             debug_stats["no_category"] += 1
-            if debug_stats["total_attempts"] <= 10:
-                log(
-                    f"  Debug [attempt {attempt}]: No suitable tree (temp={temperature:.2f}, hum={humidity:.2f}, cont={continentalness:.2f}, slope={slope_angle:.1f}°)"
-                )
+            if DEBUG_MODE:
+                log(f"  ❌ SKIP: No suitable {selected_type} found (all filtered out)")
             continue  # 배치 안함
 
-        # GLTF 임포트 및 배치 (tree_config 전달)
+        # GLTF 임포트 및 배치
         try:
-            import_and_place_gltf(gltf_file, x, y, z, normal, tree_config)
+            if DEBUG_MODE:
+                log(f"  🚀 Importing and placing: {obj_config['name']}")
+
+            import_and_place_gltf(gltf_file, x, y, z, normal, obj_config)
             debug_stats["success"] += 1
             placed_count += 1
-            if placed_count <= 5:
-                tree_name = tree_config.get(
-                    "name", os.path.basename(os.path.dirname(gltf_file))
-                )
-                scale_range = tree_config.get("scale_range", [0.8, 1.2])
+
+            obj_name = obj_config.get(
+                "name", os.path.basename(os.path.dirname(gltf_file))
+            )
+            scale_range = obj_config.get("scale_range", [0.8, 1.2])
+
+            if DEBUG_MODE or placed_count <= 10:
                 log(
-                    f"  ✅ Placed {tree_name} at ({x:.1f}, {y:.1f}, {z:.1f}) [scale: {scale_range[0]}-{scale_range[1]}] [#{placed_count}]"
+                    f"  ✅ SUCCESS: Placed {obj_name} ({selected_type}) at ({x:.1f}, {y:.1f}, {z:.1f}) [scale: {scale_range[0]}-{scale_range[1]}] [#{placed_count}]"
                 )
+
         except Exception as e:
             debug_stats["import_failed"] += 1
             log(f"  ⚠️ Failed to place object: {e}")
+            if DEBUG_MODE:
+                import traceback
+                log(f"  ⚠️ Exception traceback:\n{traceback.format_exc()}")
             continue
 
     # 디버깅 통계 출력
@@ -790,6 +956,9 @@ def main():
     log("========================================")
     log(f"Object placement finished: {placed_count} objects")
     log("========================================")
+
+    # 로그 파일 닫기
+    close_log_file()
 
 
 if __name__ == "__main__":

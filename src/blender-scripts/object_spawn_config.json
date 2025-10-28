@@ -1,80 +1,212 @@
 {
-  "trees": [
-    {
-      "name": "Cheiridopsis Succulent (Desert)",
-      "category": "desert",
-      "gltf_path": "cheiridopsis_succulent_1k/cheiridopsis_succulent_1k.gltf",
-      "param_ranges": {
-        "temperature": [0.4, 1.0],
-        "humidity": [0.0, 0.5],
-        "continentalness": [0.0, 0.8],
-        "erosion": [0.01, 0.8],
-        "slope_angle": [0, 40]
+  "trees": {
+    "type_weight": 0.25,
+    "items": [
+      {
+        "name": "Cheiridopsis Succulent (Desert)",
+        "category": "desert",
+        "gltf_path": "cheiridopsis_succulent_1k/cheiridopsis_succulent_1k.gltf",
+        "param_ranges": {
+          "temperature": [0.4, 1.0],
+          "humidity": [0.0, 0.5],
+          "continentalness": [0.0, 0.8],
+          "erosion": [0.01, 0.8],
+          "slope_angle": [0, 65]
+        },
+        "spawn_weight": 0.6,
+        "scale_range": [1.5, 4.0],
+        "description": "사막 다육식물, 건조하고 더운 지역"
       },
-      "spawn_weight": 0.6,
-      "scale_range": [1.5, 4.0],
-      "description": "사막 다육식물, 건조하고 더운 지역"
-    },
-    {
-      "name": "General Tree (Small)",
-      "category": "general",
-      "gltf_path": "tree_small_02_1k/tree_small_02_1k.gltf",
-      "param_ranges": {
-        "temperature": [-0.3, 0.7],
-        "humidity": [0.4, 0.8],
-        "continentalness": [0.0, 0.6],
-        "erosion": [0.0, 0.6],
-        "slope_angle": [0, 35]
+      {
+        "name": "General Tree (Small)",
+        "category": "general",
+        "gltf_path": "tree_small_02_1k/tree_small_02_1k.gltf",
+        "param_ranges": {
+          "temperature": [-0.3, 0.7],
+          "humidity": [0.4, 0.8],
+          "continentalness": [0.0, 0.6],
+          "erosion": [0.0, 0.6],
+          "slope_angle": [0, 60]
+        },
+        "spawn_weight": 0.8,
+        "scale_range": [0.5, 2.0],
+        "description": "일반적인 온대 기후 나무, 가장 흔함"
       },
-      "spawn_weight": 0.8,
-      "scale_range": [0.5, 2.0],
-      "description": "일반적인 온대 기후 나무, 가장 흔함"
-    },
-    {
-      "name": "Fir Tree (Big)",
-      "category": "big",
-      "gltf_path": "fir_tree_01_1k/fir_tree_01_1k.gltf",
-      "param_ranges": {
-        "temperature": [-0.5, 0.4],
-        "humidity": [0.5, 0.9],
-        "continentalness": [0.1, 0.7],
-        "erosion": [0.0, 0.4],
-        "slope_angle": [0, 25]
+      {
+        "name": "Fir Tree (Big)",
+        "category": "big",
+        "gltf_path": "fir_tree_01_1k/fir_tree_01_1k.gltf",
+        "param_ranges": {
+          "temperature": [-0.5, 0.7],
+          "humidity": [0.5, 0.9],
+          "continentalness": [0.1, 0.7],
+          "erosion": [0.0, 0.4],
+          "slope_angle": [0, 55]
+        },
+        "spawn_weight": 0.3,
+        "scale_range": [0.5, 2.0],
+        "description": "큰 침엽수, 시원하고 습한 지역, 낮은 확률"
       },
-      "spawn_weight": 0.3,
-      "scale_range": [0.5, 2.0],
-      "description": "큰 침엽수, 시원하고 습한 지역, 낮은 확률"
-    },
-    {
-      "name": "Island Tree (Big)",
-      "category": "big",
-      "gltf_path": "island_tree_02_1k/island_tree_02_1k.gltf",
-      "param_ranges": {
-        "temperature": [0.3, 0.8],
-        "humidity": [0.6, 1.0],
-        "continentalness": [-0.2, 0.3],
-        "erosion": [0.1, 0.5],
-        "slope_angle": [0, 20]
+      {
+        "name": "Island Tree (Big)",
+        "category": "big",
+        "gltf_path": "island_tree_02_1k/island_tree_02_1k.gltf",
+        "param_ranges": {
+          "temperature": [0.3, 0.95],
+          "humidity": [0.6, 1.0],
+          "continentalness": [-0.2, 0.3],
+          "erosion": [0.1, 0.5],
+          "slope_angle": [0, 65]
+        },
+        "spawn_weight": 0.2,
+        "scale_range": [0.5, 2.0],
+        "description": "큰 열대 나무, 해안가 근처 습한 지역"
       },
-      "spawn_weight": 0.2,
-      "scale_range": [0.5, 2.0],
-      "description": "큰 열대 나무, 해안가 근처 습한 지역"
-    },
-    {
-      "name": "Quiver Tree (Tropical)",
-      "category": "tropical",
-      "gltf_path": "quiver_tree_02_1k/quiver_tree_02_1k.gltf",
-      "param_ranges": {
-        "temperature": [0.4, 1.0],
-        "humidity": [0.65, 1.0],
-        "continentalness": [-0.1, 0.35],
-        "erosion": [0.0, 0.3],
-        "slope_angle": [0, 20]
+      {
+        "name": "Quiver Tree (Tropical)",
+        "category": "tropical",
+        "gltf_path": "quiver_tree_02_1k/quiver_tree_02_1k.gltf",
+        "param_ranges": {
+          "temperature": [0.5, 1.0],
+          "humidity": [0.65, 1.0],
+          "continentalness": [-0.1, 0.55],
+          "erosion": [0.0, 0.7],
+          "slope_angle": [0, 80]
+        },
+        "spawn_weight": 0.7,
+        "scale_range": [2.0, 4.0],
+        "description": "열대 야자수, 물가 근처 따뜻하고 습한 평지"
+      }
+    ]
+  },
+  "flowers": {
+    "type_weight": 0.6,
+    "items": [
+      {
+        "name": "Dandelion",
+        "category": "general",
+        "gltf_path": "dandelion_01_1k/dandelion_01_1k.gltf",
+        "param_ranges": {
+          "temperature": [-0.2, 0.6],
+          "humidity": [0.3, 0.8],
+          "continentalness": [0.2, 0.7],
+          "erosion": [0.0, 0.5],
+          "slope_angle": [0, 65]
+        },
+        "spawn_weight": 1.0,
+        "scale_range": [0.4, 0.8],
+        "description": "민들레, 온대 기후 평지"
       },
-      "spawn_weight": 0.7,
-      "scale_range": [2.0, 4.0],
-      "description": "열대 야자수, 물가 근처 따뜻하고 습한 평지"
-    }
-    
-  ]
+      {
+        "name": "Empodium Flower",
+        "category": "general",
+        "gltf_path": "flower_empodium_1k/flower_empodium_1k.gltf",
+        "param_ranges": {
+          "temperature": [0.0, 0.7],
+          "humidity": [0.4, 0.9],
+          "continentalness": [0.2, 0.7],
+          "erosion": [0.0, 0.4],
+          "slope_angle": [0, 60]
+        },
+        "spawn_weight": 0.8,
+        "scale_range": [0.4, 0.8],
+        "description": "작은 야생화, 습한 평지"
+      },
+      {
+        "name": "Gazania Flower",
+        "category": "general",
+        "gltf_path": "flower_gazania_1k/flower_gazania_1k.gltf",
+        "param_ranges": {
+          "temperature": [0.2, 0.8],
+          "humidity": [0.3, 0.7],
+          "continentalness": [0.2, 0.7],
+          "erosion": [0.0, 0.5],
+          "slope_angle": [0, 60]
+        },
+        "spawn_weight": 0.9,
+        "scale_range": [0.5, 0.9],
+        "description": "가자니아 꽃, 따뜻한 평지"
+      },
+      {
+        "name": "Periwinkle Plant",
+        "category": "general",
+        "gltf_path": "periwinkle_plant_1k/periwinkle_plant_1k.gltf",
+        "param_ranges": {
+          "temperature": [-0.1, 0.6],
+          "humidity": [0.5, 1.0],
+          "continentalness": [0.2, 0.7],
+          "erosion": [0.0, 0.3],
+          "slope_angle": [0, 65]
+        },
+        "spawn_weight": 0.7,
+        "scale_range": [0.4, 0.8],
+        "description": "빙카, 습하고 시원한 평지"
+      }
+    ]
+  },
+  "rocks": {
+    "type_weight": 0.01,
+    "items": [
+      {
+        "name": "Moon Rock (Small)",
+        "category": "general",
+        "gltf_path": "moon_rock_03_1k/moon_rock_03_1k.gltf",
+        "param_ranges": {
+          "erosion": [0.3, 1.0],
+          "slope_angle": [10, 60],
+          "rock_exposure": [0.2, 1.0],
+          "humidity": [0.0, 0.7]
+        },
+        "spawn_weight": 1.0,
+        "scale_range": [0.5, 1.5],
+        "full_rotation": true,
+        "description": "작은 바위, 침식된 경사지"
+      },
+      {
+        "name": "Namaqualand Boulder 03",
+        "category": "general",
+        "gltf_path": "namaqualand_boulder_03_1k/namaqualand_boulder_03_1k.gltf",
+        "param_ranges": {
+          "erosion": [0.4, 1.0],
+          "slope_angle": [5, 55],
+          "rock_exposure": [0.3, 1.0],
+          "humidity": [0.0, 0.6]
+        },
+        "spawn_weight": 0.8,
+        "scale_range": [0.8, 2.0],
+        "full_rotation": true,
+        "description": "중간 크기 바위"
+      },
+      {
+        "name": "Namaqualand Boulder 04",
+        "category": "general",
+        "gltf_path": "namaqualand_boulder_04_1k/namaqualand_boulder_04_1k.gltf",
+        "param_ranges": {
+          "erosion": [0.5, 1.0],
+          "slope_angle": [0, 50],
+          "rock_exposure": [0.4, 1.0],
+          "humidity": [0.0, 0.5]
+        },
+        "spawn_weight": 0.6,
+        "scale_range": [1.0, 2.5],
+        "full_rotation": true,
+        "description": "큰 바위, 건조하고 침식된 지역"
+      },
+      {
+        "name": "Namaqualand Boulder 05",
+        "category": "general",
+        "gltf_path": "namaqualand_boulder_05_1k/namaqualand_boulder_05_1k.gltf",
+        "param_ranges": {
+          "erosion": [0.6, 1.0],
+          "slope_angle": [0, 55],
+          "rock_exposure": [0.5, 1.0],
+          "humidity": [0.0, 0.4]
+        },
+        "spawn_weight": 0.4,
+        "scale_range": [1.2, 3.0],
+        "full_rotation": true,
+        "description": "매우 큰 바위, 매우 건조하고 바위 노출 높은 곳"
+      }
+    ]
+  }
 }

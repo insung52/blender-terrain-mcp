@@ -89,17 +89,22 @@ Generate a biome layout based on the user's description.
    - Middle: y ≈ 40~60
    - Bottom: y ≈ 15~25
 4. Coverage rules:
-   - 🏔️ **Mountains/Hills (continentalness > 0.5)**: ALWAYS use small coverage = 0.05~0.15
+   - 🏔️ **Mountains/Hills (continentalness > 0.5)**: ALWAYS use small coverage = 0.1~0.2
      - Mountains should be sharp peaks, not wide plateaus
-     - Exception: User explicitly says "very large mountain range" → 0.15~0.3
+     - Exception: User explicitly says "very large mountain range" → 0.15~0.4
    - Plains/Deserts/Forests: Normal coverage = 0.25~0.35
-   - Lakes/Swamps: Small to medium = 0.15~0.25
+   - Lakes/Swamps: Small to medium = 0.2~0.25
 5. Erosion guidelines:
    - 🏔️ **Mountains**: High erosion (0.7~0.9) for rugged, rocky appearance
    - 🌾 **Plains/Grasslands/Deserts**: Low erosion (0.1~0.2) for gentle rolling terrain
-   - 🌲 **Forests**: Medium erosion (0.3~0.5) for hilly woodland
+   - 🌲 **Forests/Jungles**: Medium erosion (0.3~0.5) for hilly woodland
    - 🏞️ **Perfect flat terrain**: ONLY when user explicitly requests "완벽한 평지" or "perfectly flat" → erosion = 0.0
-6. Continentalness & Water guidelines:
+6. Continentalness guidelines (controls terrain HEIGHT):
+   - 🌴 **Jungle**: continentalness = 0.1 ~ 0.3 (elevated terrain, like plateau)
+   - 🏔️ **Mountains**: continentalness = 0.6 ~ 1.0 (high elevation)
+   - 🏞️ **Plains/Grasslands**: continentalness = 0.1 ~ 0.4 (normal ground level)
+   - 🏜️ **Deserts**: continentalness = 0.2 ~ 0.5 (slightly elevated, flat)
+   - 🌲 **Forests**: continentalness = 0.2 ~ 0.5 (gentle elevation)
    - 🌊 **Shallow water (lakes, ponds, rivers)**: continentalness = -0.1 ~ -0.3 (slightly below ground level)
      - Use -0.1 for very shallow water, -0.3 for deeper lakes
      - NEVER use -0.8 unless user explicitly says "deep ocean" or "very deep water"
@@ -120,7 +125,7 @@ AI Response:
     {
       "position": [15, 50],
       "biome_params": { /* snowy_mountain preset */ },
-      "coverage": 0.1,  // 🏔️ Mountain: small coverage for sharp peak
+      "coverage": 0.15,  // 🏔️ Mountain: small coverage for sharp peak
       "description": "snowy_mountain"
     },
     {
