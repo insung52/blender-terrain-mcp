@@ -189,22 +189,40 @@ export const config = {
 
 #### 7. Assets Setup
 
-Place 3D assets (.blend files) in `assets/` directory:
-```
-assets/
-├── trees/
-│   ├── tree1.blend
-│   ├── tree2.blend
-│   └── ...
-├── flowers/
-│   ├── flower1.blend
-│   └── ...
-└── rocks/
-    ├── rock1.blend
-    └── ...
-```
+**Download 3D Assets:**
 
-Edit object spawn configuration:
+1. Download the objects folder from Google Drive:
+   - [Download Link](https://drive.google.com/file/d/15fzYVKP-1JG6VgKY7ksutZmzcgGNc8s2/view?usp=sharing)
+
+2. Extract the downloaded ZIP file
+
+3. Move the extracted `objects/` folder into `assets/` directory:
+   ```
+   assets/
+   └── objects/
+       ├── trees/
+       │   ├── tree1.blend
+       │   ├── tree2.blend
+       │   └── ...
+       ├── flowers/
+       │   ├── flower1.blend
+       │   └── ...
+       └── rocks/
+           ├── rock1.blend
+           └── ...
+   ```
+
+4. Verify the structure:
+   ```bash
+   # The final path should be:
+   # C:\graphics\buildup\blender-terrain-mcp\assets\objects\trees\tree1.blend
+   # C:\graphics\buildup\blender-terrain-mcp\assets\objects\flowers\flower1.blend
+   # C:\graphics\buildup\blender-terrain-mcp\assets\objects\rocks\rock1.blend
+   ```
+
+**Configure Object Spawning:**
+
+Edit object spawn configuration to match your asset names:
 ```bash
 # Edit src/blender-scripts/object_spawn_config.json
 ```
