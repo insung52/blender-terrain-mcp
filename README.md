@@ -266,34 +266,66 @@ Access application at: `http://localhost:3000`
 
 1. Navigate to **Terrain Gallery** tab
 2. Enter description in Korean (e.g., "눈 덮인 높은 산맥")
-3. Check **"Use Claude AI to analyze description"**
-4. Click **"Generate Terrain"**
-5. Progress modal opens automatically
-6. Wait for completion (2-5 minutes)
-7. View terrain in gallery
+
+![alt text](assets/md/u1.png)
+
+3. Click **"Create Terrain"**
+
+
+![alt text](assets/md/u2.png)
+
+
+4. Progress modal opens automatically
+5. Wait for completion (2-5 minutes)
+6. View terrain in gallery and download generated terrain
+
+![alt text](assets/md/u3.png)
+
+---
 
 ### Adding Roads
 
 1. In **Terrain Gallery**, click **"🛣️ Add Road"** on a completed terrain
-2. **Option A - Manual Input:**
-   - Enter control points as JSON array: `[[10,10],[50,80],[90,30]]`
-   - Click **"Create Road"**
 
-3. **Option B - Canvas Drawing:**
-   - Click **"🎨 Draw on Canvas"**
-   - Click points on terrain preview to draw road path
-   - Click **"Create Road"**
+![alt text](assets/md/u4.png)
+
+
+![alt text](assets/md/u5.png)
+
+2. **Option A - Canvas Drawing:**
+- Click **"🎨 Draw on Canvas"**
+- Click points on terrain preview to draw road path
+- Click **"Create Road"**
+
+3. **Option B - Manual Input:**
+- Enter control points as JSON array: `[[10,10],[50,80],[90,30]]`
+- Click **"Create Road"**
+
 
 4. Monitor progress in modal
 5. View road in **Road Gallery**
 
+![alt text](assets/md/u6.png)
+
+---
+
 ### Adding Objects
 
+![alt text](assets/md/u7.png)
+
 1. In **Road Gallery**, click **"🌲 오브젝트 생성"** on a road
+
+![alt text](assets/md/u8.png)
+
 2. Enter object count (recommended: 50-200)
-3. Automatically switches to **Objects Gallery**
-4. Progress modal shows live placement updates
-5. View completed objects in gallery
+
+![alt text](assets/md/u9.png)
+
+3. Progress modal shows live placement updates
+
+![alt text](assets/md/u10.png)
+
+4. View completed objects in gallery
 
 ### Downloading
 
@@ -303,6 +335,8 @@ Access application at: `http://localhost:3000`
   - Subsequent clicks: Instant download (cached)
   - Includes baked diffuse textures
   - Removes hidden cache objects
+
+---
 
 ## 🔧 Technical Details
 

@@ -589,22 +589,111 @@ app.post('/api/road', async (req, res) => {
             }
         });
         console.log(`[API] Created road job: ${dbJob.id}`);
-        // Queue: Job 추가
-        await blenderQueue_1.blenderQueue.add({
-            dbJobId: dbJob.id,
-            type: 'road',
-            params: {
+        // Road 레코드를 미리 생성 (status: processing)
+        const road = await client_1.prisma.road.create({
+            data: {
+                jobId: dbJob.id,
                 terrainId,
-                terrainBlendPath: terrain.blendFilePath,
+                userId: 'test-user',
                 controlPoints,
-                width: width || 1.6
+                blendFilePath: '', // 아직 생성 안됨
+                previewPath: '', // 아직 생성 안됨
+                widthMeters: width || 1.6,
+                metadata: {
+                    status: 'processing',
+                    jobId: dbJob.id
+                }
             }
         });
+        console.log(`[API] Created placeholder road: ${road.id}`);
+        // Progress 추적 등록
+        progressService_1.progressService.registerJob(dbJob.id, ['road_generation', 'preview_render']);
+        // 백그라운드 작업 시작 (비동기)
+        (async () => {
+            try {
+                progressService_1.progressService.updateJobStatus(dbJob.id, 'processing');
+                progressService_1.progressService.startStep(dbJob.id, 'road_generation', 'Generating road mesh...');
+                const outputPath = path_1.default.join(outputDir, `${dbJob.id}.blend`);
+                const previewPath = path_1.default.join(outputDir, `${dbJob.id}_preview.png`);
+                console.log(`[Background] Creating road with ${controlPoints.length} points`);
+                // Road 생성
+                const scriptPath = path_1.default.join(__dirname, 'blender-scripts', 'road_generator_logged.py');
+                const paramsFilePath = path_1.default.join(outputDir, `${dbJob.id}_params.json`);
+                const fs = require('fs');
+                fs.writeFileSync(paramsFilePath, JSON.stringify({
+                    controlPoints,
+                    width: width || 1.6
+                }));
+                const { exec } = require('child_process');
+                const { promisify } = require('util');
+                const execAsync = promisify(exec);
+                const { config } = require('./config');
+                const command = `"${config.blenderPath}" "${terrain.blendFilePath}" --background --python "${scriptPath}" -- "${paramsFilePath}" "${terrain.blendFilePath}" "${outputPath}" "${previewPath}"`;
+                console.log(`[Background] Executing Blender...`);
+                const result = await execAsync(command, {
+                    maxBuffer: 10 * 1024 * 1024,
+                    encoding: 'utf8',
+                    windowsHide: true,
+                    env: { ...process.env }
+                });
+                // 임시 파일 삭제
+                try {
+                    fs.unlinkSync(paramsFilePath);
+                }
+                catch (e) { }
+                console.log(`[Background] ✅ Road created`);
+                // Progress 업데이트
+                progressService_1.progressService.completeStep(dbJob.id, 'road_generation', 'Road mesh created');
+                progressService_1.progressService.startStep(dbJob.id, 'preview_render', 'Rendering preview...');
+                progressService_1.progressService.completeStep(dbJob.id, 'preview_render', 'Preview rendered');
+                // Road 레코드 업데이트 (먼저 수행)
+                await client_1.prisma.road.update({
+                    where: { id: road.id },
+                    data: {
+                        blendFilePath: outputPath,
+                        previewPath: previewPath,
+                        metadata: {
+                            status: 'completed',
+                            controlPoints: controlPoints.length,
+                            jobId: dbJob.id
+                        }
+                    }
+                });
+                // Job 완료
+                await client_1.prisma.job.update({
+                    where: { id: dbJob.id },
+                    data: { status: 'completed', result: { blendFile: outputPath, preview: previewPath } }
+                });
+                // Progress 완료 (DB 업데이트 후에 SSE 전송)
+                progressService_1.progressService.completeJob(dbJob.id, { blendFile: outputPath, preview: previewPath });
+            }
+            catch (error) {
+                console.error(`[Background] ❌ Road creation failed:`, error.message);
+                // Progress 실패 처리
+                progressService_1.progressService.failJob(dbJob.id, error.message);
+                // Job 실패
+                await client_1.prisma.job.update({
+                    where: { id: dbJob.id },
+                    data: { status: 'failed' }
+                });
+                // Road 레코드 업데이트 (실패 상태)
+                await client_1.prisma.road.update({
+                    where: { id: road.id },
+                    data: {
+                        metadata: {
+                            status: 'failed',
+                            error: error.message,
+                            jobId: dbJob.id
+                        }
+                    }
+                });
+            }
+        })();
+        // 즉시 응답 반환
         res.json({
             success: true,
             jobId: dbJob.id,
-            status: 'queued',
-            message: 'Road generation started'
+            roadId: road.id
         });
     }
     catch (error) {

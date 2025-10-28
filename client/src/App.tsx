@@ -186,12 +186,15 @@ function App() {
     console.log('[App] Job completed:', result);
     // Reload terrains list
     loadTerrains();
+    // Reload roads list
+    loadRoads();
     // Reload objects list immediately (triggers ObjectsGallery refresh)
     setObjectsRefreshTrigger(prev => prev + 1);
 
     // Reload again after a short delay to ensure DB is updated
     setTimeout(() => {
       setObjectsRefreshTrigger(prev => prev + 1);
+      loadRoads();
     }, 500);
 
     // Close progress modal after a delay
@@ -210,7 +213,7 @@ function App() {
   const createRoad = async () => {
     if (!roadTerrainId) {
       alert('Please enter Terrain ID');
-      return;
+      return null;
     }
 
     setLoading(true);
@@ -234,16 +237,14 @@ function App() {
 
       if (data.success && data.jobId) {
         setJobId(data.jobId);
-        alert(`Road job created!\nJob ID: ${data.jobId}\n\nProcessing... Roads will appear in gallery when complete.`);
-        // Reload roads list after a delay
-        setTimeout(() => loadRoads(), 2000);
-        setTimeout(() => loadRoads(), 5000);
-        setTimeout(() => loadRoads(), 10000);
+        return data; // Return the full response data
       } else {
         alert('Road creation failed: ' + (data.error || 'Unknown error'));
+        return null;
       }
     } catch (error: any) {
       alert('Error: ' + error.message);
+      return null;
     } finally {
       setLoading(false);
     }
@@ -375,10 +376,25 @@ function App() {
   };
 
   const handleRoadModalSubmit = async () => {
-    await createRoad();
+    const result = await createRoad();
     setShowRoadModal(false);
     setDrawnPoints([]);
-    loadRoads();
+
+    // Check if road creation started successfully
+    if (result && result.jobId) {
+      // Road gallery로 전환
+      setActiveTab('road');
+
+      // Progress 팝업 표시
+      setProgressJobId(result.jobId);
+      setShowProgressModal(true);
+
+      // localStorage에 jobId 저장 (페이지 새로고침 대응)
+      localStorage.setItem('currentJobId', result.jobId);
+
+      // Roads 목록 즉시 갱신 (처리 중인 road 표시)
+      loadRoads();
+    }
   };
 
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -933,104 +949,176 @@ function App() {
             gap: '1rem',
             marginTop: '1rem'
           }}>
-            {roads.map((road) => (
-              <div
-                key={road.id}
-                style={{
-                  border: '1px solid #ddd',
-                  borderRadius: '8px',
-                  padding: '1rem',
-                  backgroundColor: '#f9f9f9'
-                }}
-              >
-                {road.previewPath && (
-                  <img
-                    src={`${API_URL}/output/${road.previewPath.split('\\').pop()}`}
-                    alt="Road preview"
-                    style={{
+            {roads.map((road) => {
+              const isProcessing = road.metadata?.status === 'processing' || !road.blendFilePath;
+              const jobId = road.metadata?.jobId;
+
+              return (
+                <div
+                  key={road.id}
+                  style={{
+                    border: '1px solid #ddd',
+                    borderRadius: '8px',
+                    padding: '1rem',
+                    backgroundColor: '#f9f9f9',
+                    position: 'relative'
+                  }}
+                >
+                  {/* Processing 뱃지 */}
+                  {isProcessing && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '10px',
+                      right: '10px',
+                      backgroundColor: '#FF9800',
+                      color: '#fff',
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      fontWeight: 'bold'
+                    }}>
+                      Processing...
+                    </div>
+                  )}
+
+                  {/* Placeholder for processing */}
+                  {isProcessing ? (
+                    <div style={{
                       width: '100%',
                       height: '200px',
-                      objectFit: 'cover',
+                      backgroundColor: '#e0e0e0',
                       borderRadius: '4px',
                       marginBottom: '0.5rem',
-                      cursor: 'pointer'
-                    }}
-                    onClick={() => showRoadJobDetails(road)}
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none';
-                    }}
-                  />
-                )}
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#666',
+                      fontSize: '14px'
+                    }}>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '48px', marginBottom: '10px' }}>⏳</div>
+                        <div>Generating road...</div>
+                      </div>
+                    </div>
+                  ) : (
+                    road.previewPath && (
+                      <img
+                        src={`${API_URL}/output/${road.previewPath.split('\\').pop()}`}
+                        alt="Road preview"
+                        style={{
+                          width: '100%',
+                          height: '200px',
+                          objectFit: 'cover',
+                          borderRadius: '4px',
+                          marginBottom: '0.5rem',
+                          cursor: 'pointer'
+                        }}
+                        onClick={() => showRoadJobDetails(road)}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                    )
+                  )}
 
-                <h4 style={{ margin: '0.5rem 0', fontSize: '1em', color: '#333' }}>
-                  Road on {road.terrain?.description || 'Unknown Terrain'}
-                </h4>
+                  <h4 style={{ margin: '0.5rem 0', fontSize: '1em', color: '#333' }}>
+                    Road on {road.terrain?.description || 'Unknown Terrain'}
+                  </h4>
 
-                <p style={{ fontSize: '0.85em', color: '#666', margin: '0.25rem 0' }}>
-                  Created: {new Date(road.createdAt).toLocaleString()}
-                </p>
+                  <p style={{ fontSize: '0.85em', color: '#666', margin: '0.25rem 0' }}>
+                    Created: {new Date(road.createdAt).toLocaleString()}
+                  </p>
 
-                <p style={{ fontSize: '0.8em', color: '#555', marginTop: '0.5rem' }}>
-                  Control Points: {road.controlPoints?.length || 0}
-                </p>
+                  <p style={{ fontSize: '0.8em', color: '#555', marginTop: '0.5rem' }}>
+                    Control Points: {road.controlPoints?.length || 0}
+                  </p>
 
-                <div style={{
-                  marginTop: '1rem',
-                  display: 'flex',
-                  gap: '0.5rem',
-                  flexDirection: 'column'
-                }}>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      createObjectsForRoad(road);
-                    }}
-                    style={{
-                      padding: '0.5rem',
-                      backgroundColor: '#4CAF50',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '0.9em'
-                    }}
-                    disabled={loading}
-                  >
-                    🌲 오브젝트 생성
-                  </button>
+                  <div style={{
+                    marginTop: '1rem',
+                    display: 'flex',
+                    gap: '0.5rem',
+                    flexDirection: 'column'
+                  }}>
+                    {isProcessing ? (
+                      // Show Progress 버튼 (처리 중일 때)
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (jobId) {
+                            setProgressJobId(jobId);
+                            setShowProgressModal(true);
+                          }
+                        }}
+                        style={{
+                          padding: '0.5rem',
+                          backgroundColor: '#FF9800',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '0.9em',
+                          fontWeight: 'bold'
+                        }}
+                      >
+                        📊 Show Progress
+                      </button>
+                    ) : (
+                      // 일반 버튼들 (완료 후)
+                      <>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            createObjectsForRoad(road);
+                          }}
+                          style={{
+                            padding: '0.5rem',
+                            backgroundColor: '#4CAF50',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '0.9em'
+                          }}
+                          disabled={loading}
+                        >
+                          🌲 오브젝트 생성
+                        </button>
 
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteRoad(road.id);
-                    }}
-                    style={{
-                      padding: '0.5rem',
-                      backgroundColor: '#f44336',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '0.9em'
-                    }}
-                    disabled={loading}
-                  >
-                    🗑️ Delete
-                  </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteRoad(road.id);
+                          }}
+                          style={{
+                            padding: '0.5rem',
+                            backgroundColor: '#f44336',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '0.9em'
+                          }}
+                          disabled={loading}
+                        >
+                          🗑️ Delete
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  <p style={{
+                    fontSize: '0.7em',
+                    color: '#999',
+                    marginTop: '0.5rem',
+                    fontFamily: 'monospace',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }}>
+                    ID: {road.id}
+                  </p>
                 </div>
-
-                <p style={{
-                  fontSize: '0.7em',
-                  color: '#999',
-                  marginTop: '0.5rem',
-                  fontFamily: 'monospace',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis'
-                }}>
-                  ID: {road.id}
-                </p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>}
