@@ -2,7 +2,7 @@
 
 A full-stack web application for generating realistic 3D terrains with AI-powered biome layouts, road systems, and object placement.
 
-![Terrain Gallery](assets/md/1019.png)
+![Terrain Gallery](assets/md/u11.png)
 
 ## 🌟 Features
 

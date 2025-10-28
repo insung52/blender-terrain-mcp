@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { Objects } from '../types';
 
-const API_URL = 'http://localhost:3000';
+const API_URL = '';
 
 interface ObjectsGalleryProps {
   onShowProgress?: (jobId: string) => void;
