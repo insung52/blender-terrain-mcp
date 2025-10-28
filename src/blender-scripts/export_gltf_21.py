@@ -3,6 +3,9 @@ GLTF Export with Terrain Texture Baking
 - 지형: Texture Baking (Shader Nodes → PNG)
 - 도로/물: 그대로 유지 (UV 보존)
 
+& "C:\Program Files\Blender Foundation\Blender 4.5\blender.exe" "C:\graphics\buildup\blender-terrain-mcp\output\test.blend" --background --python "C:\graphics\buildup\blender-terrain-mcp\src\blender-scripts\export_gltf_21.py" -- "C:\graphics\buildup\blender-terrain-mcp\output\test.glb"
+
+
 Usage:
     blender <input.blend> --background --python test_gltf_export.py -- <output.glb>
 """

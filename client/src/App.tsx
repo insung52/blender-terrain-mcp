@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import './App.css';
 import { simplifyDrawnPath } from './utils/simplifyPath';
 import { ObjectsGallery } from './components/ObjectsGallery';
+import { ProgressMonitor } from './components/ProgressMonitor';
 
 interface Terrain {
   id: string;
@@ -12,6 +13,7 @@ interface Terrain {
   blendFilePath: string;
   topViewPath?: string;
   metadata?: any;
+  jobId?: string;
 }
 
 interface Job {
@@ -58,6 +60,9 @@ function App() {
   const [jobId, setJobId] = useState('');
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showProgressModal, setShowProgressModal] = useState(false);
+  const [progressJobId, setProgressJobId] = useState<string>('');
+  const [objectsRefreshTrigger, setObjectsRefreshTrigger] = useState(0);
 
   const [activeTab, setActiveTab] = useState<'terrain' | 'road' | 'objects'>('terrain');
 
@@ -67,6 +72,40 @@ function App() {
   useEffect(() => {
     loadTerrains();
     loadRoads();
+
+    // Check for ongoing job (reconnection)
+    const savedJobId = localStorage.getItem('currentJobId');
+    const savedJobType = localStorage.getItem('currentJobType');
+
+    if (savedJobId && savedJobType === 'terrain') {
+      // Check if job is still in progress
+      fetch(`${API_URL}/api/job/${savedJobId}/status`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.job) {
+            const jobStatus = data.job.status;
+            if (jobStatus === 'queued' || jobStatus === 'processing') {
+              // Job is still in progress, reconnect
+              console.log('[App] Reconnecting to job:', savedJobId);
+              setProgressJobId(savedJobId);
+              setShowProgressModal(true);
+            } else if (jobStatus === 'completed') {
+              // Job completed while user was away
+              console.log('[App] Job completed while offline');
+              localStorage.removeItem('currentJobId');
+              localStorage.removeItem('currentJobType');
+              loadTerrains();
+            } else {
+              // Job failed or unknown state
+              localStorage.removeItem('currentJobId');
+              localStorage.removeItem('currentJobType');
+            }
+          }
+        })
+        .catch(err => {
+          console.error('[App] Failed to check job status:', err);
+        });
+    }
   }, []);
 
   const loadTerrains = async () => {
@@ -124,9 +163,15 @@ function App() {
 
       if (data.success && data.jobId) {
         setJobId(data.jobId);
-        alert(`Terrain job created!\nJob ID: ${data.jobId}\n\nProcessing... Click "Check Job" to see progress.`);
-        // Reload terrains list after a delay
-        setTimeout(() => loadTerrains(), 2000);
+        setProgressJobId(data.jobId);
+        setShowProgressModal(true);
+
+        // Store jobId in localStorage for reconnection
+        localStorage.setItem('currentJobId', data.jobId);
+        localStorage.setItem('currentJobType', 'terrain');
+
+        // Immediately reload terrains to show the processing terrain
+        loadTerrains();
       } else {
         alert('Terrain creation failed: ' + (data.error || 'Unknown error'));
       }
@@ -135,6 +180,31 @@ function App() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleProgressComplete = (result: any) => {
+    console.log('[App] Job completed:', result);
+    // Reload terrains list
+    loadTerrains();
+    // Reload objects list immediately (triggers ObjectsGallery refresh)
+    setObjectsRefreshTrigger(prev => prev + 1);
+
+    // Reload again after a short delay to ensure DB is updated
+    setTimeout(() => {
+      setObjectsRefreshTrigger(prev => prev + 1);
+    }, 500);
+
+    // Close progress modal after a delay
+    setTimeout(() => {
+      setShowProgressModal(false);
+      localStorage.removeItem('currentJobId');
+      localStorage.removeItem('currentJobType');
+    }, 2000);
+  };
+
+  const handleProgressFailed = (error: string) => {
+    console.error('[App] Job failed:', error);
+    alert(`Job failed: ${error}`);
   };
 
   const createRoad = async () => {
@@ -275,8 +345,16 @@ function App() {
       });
 
       const data = await response.json();
-      if (data.success) {
-        alert(`✅ ${data.objects.objectCount}개 오브젝트 배치 완료!\n\nObjects Gallery 탭에서 확인하세요.`);
+      if (data.success && data.jobId) {
+        // Objects gallery로 전환
+        setActiveTab('objects');
+
+        // Progress 팝업 표시
+        setProgressJobId(data.jobId);
+        setShowProgressModal(true);
+
+        // localStorage에 jobId 저장 (페이지 새로고침 대응)
+        localStorage.setItem('currentJobId', data.jobId);
       } else {
         alert(`❌ 오류: ${data.error}`);
       }
@@ -466,6 +544,61 @@ function App() {
     <div className="app">
       <h1>🏔️ Terrain Generator</h1>
 
+      {/* Progress Modal */}
+      {showProgressModal && progressJobId && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: '#1a1a1a',
+            padding: '30px',
+            borderRadius: '12px',
+            maxWidth: '600px',
+            width: '90%',
+            maxHeight: '80vh',
+            overflow: 'auto'
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '20px'
+            }}>
+              <h2 style={{ margin: 0 }}>Terrain Generation Progress</h2>
+              <button
+                onClick={() => {
+                  setShowProgressModal(false);
+                  // Don't remove from localStorage - allow reconnection
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#fff',
+                  fontSize: '24px',
+                  cursor: 'pointer'
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <ProgressMonitor
+              jobId={progressJobId}
+              onComplete={handleProgressComplete}
+              onFailed={handleProgressFailed}
+            />
+          </div>
+        </div>
+      )}
+
       {/* 탭 네비게이션 */}
       <div style={{
         display: 'flex',
@@ -521,7 +654,15 @@ function App() {
       </div>
 
       {/* Objects Gallery */}
-      {activeTab === 'objects' && <ObjectsGallery />}
+      {activeTab === 'objects' && (
+        <ObjectsGallery
+          onShowProgress={(jobId) => {
+            setProgressJobId(jobId);
+            setShowProgressModal(true);
+          }}
+          refreshTrigger={objectsRefreshTrigger}
+        />
+      )}
 
       {/* Terrain & Road Sections (기존 코드) */}
       {activeTab !== 'objects' && (
@@ -596,18 +737,38 @@ function App() {
             gap: '1rem',
             marginTop: '1rem'
           }}>
-            {terrains.map((terrain) => (
+            {terrains.map((terrain) => {
+              const isProcessing = terrain.metadata?.status === 'processing' || !terrain.blendFilePath;
+
+              return (
               <div
                 key={terrain.id}
                 style={{
                   border: selectedTerrain?.id === terrain.id ? '2px solid #4CAF50' : '1px solid #ddd',
                   borderRadius: '8px',
                   padding: '1rem',
-                  backgroundColor: '#f9f9f9',
-                  transition: 'all 0.2s'
+                  backgroundColor: isProcessing ? '#fff3e0' : '#f9f9f9',
+                  transition: 'all 0.2s',
+                  position: 'relative'
                 }}
               >
-                {terrain.topViewPath && (
+                {isProcessing && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '10px',
+                    right: '10px',
+                    background: '#FF9800',
+                    color: '#fff',
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    fontSize: '12px',
+                    fontWeight: 'bold'
+                  }}>
+                    ⏳ Processing...
+                  </div>
+                )}
+
+                {terrain.topViewPath && !isProcessing && (
                   <img
                     src={`${API_URL}/output/${terrain.topViewPath.split('\\').pop()}`}
                     alt="Terrain preview"
@@ -624,6 +785,26 @@ function App() {
                       (e.target as HTMLImageElement).style.display = 'none';
                     }}
                   />
+                )}
+
+                {isProcessing && (
+                  <div style={{
+                    width: '100%',
+                    height: '200px',
+                    backgroundColor: '#e0e0e0',
+                    borderRadius: '4px',
+                    marginBottom: '0.5rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#666',
+                    fontSize: '14px'
+                  }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '48px', marginBottom: '10px' }}>⏳</div>
+                      <div>Generating terrain...</div>
+                    </div>
+                  </div>
                 )}
 
                 <h4 style={{ margin: '0.5rem 0', fontSize: '1em', color: '#333' }}>
@@ -654,43 +835,71 @@ function App() {
                   gap: '0.5rem',
                   flexWrap: 'wrap'
                 }}>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      createRoadForTerrain(terrain);
-                    }}
-                    style={{
-                      flex: 1,
-                      padding: '0.5rem',
-                      backgroundColor: '#4CAF50',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '0.9em'
-                    }}
-                  >
-                    🛣️ Add Road
-                  </button>
+                  {isProcessing ? (
+                    // Show Progress 버튼 (처리 중일 때)
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (terrain.jobId) {
+                          setProgressJobId(terrain.jobId);
+                          setShowProgressModal(true);
+                        }
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: '0.5rem',
+                        backgroundColor: '#FF9800',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '0.9em',
+                        fontWeight: 'bold'
+                      }}
+                    >
+                      📊 Show Progress
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          createRoadForTerrain(terrain);
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: '0.5rem',
+                          backgroundColor: '#4CAF50',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '0.9em'
+                        }}
+                      >
+                        🛣️ Add Road
+                      </button>
 
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteTerrain(terrain.id);
-                    }}
-                    style={{
-                      padding: '0.5rem',
-                      backgroundColor: '#f44336',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteTerrain(terrain.id);
+                        }}
+                        style={{
+                          padding: '0.5rem',
+                          backgroundColor: '#f44336',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
                       fontSize: '0.9em'
                     }}
                     disabled={loading}
                   >
                     🗑️ Delete
                   </button>
+                    </>
+                  )}
                 </div>
 
                 <p style={{
@@ -704,7 +913,8 @@ function App() {
                   ID: {terrain.id}
                 </p>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>}

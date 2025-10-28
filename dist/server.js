@@ -42,6 +42,7 @@ const blenderService_1 = require("./services/blenderService");
 const client_1 = require("./db/client");
 const blenderQueue_1 = require("./queue/blenderQueue");
 const biomeService_1 = require("./services/biomeService");
+const progressService_1 = require("./services/progressService");
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const app = (0, express_1.default)();
@@ -67,6 +68,73 @@ app.get('/api/health', (req, res) => {
         message: 'Blender Terrain MCP Server',
         version: '1.0.0'
     });
+});
+// SSE endpoint for job progress
+app.get('/api/job/:jobId/progress', (req, res) => {
+    const { jobId } = req.params;
+    // SSE 헤더 설정
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    // 연결 등록
+    progressService_1.progressService.addConnection(jobId, res);
+    // 현재 상태 즉시 전송
+    const progress = progressService_1.progressService.getJobProgress(jobId);
+    if (progress) {
+        res.write(`data: ${JSON.stringify({
+            type: 'connected',
+            status: progress.status,
+            currentStep: progress.currentStep,
+            steps: progress.steps
+        })}\n\n`);
+    }
+    else {
+        res.write(`data: ${JSON.stringify({
+            type: 'not_found',
+            message: 'Job not found'
+        })}\n\n`);
+    }
+    console.log(`[SSE] Client connected to job ${jobId}`);
+    // 연결 해제 시
+    req.on('close', () => {
+        console.log(`[SSE] Client disconnected from job ${jobId}`);
+    });
+});
+// Get job progress status (for polling or reconnect)
+app.get('/api/job/:jobId/status', async (req, res) => {
+    try {
+        const { jobId } = req.params;
+        // 1. 먼저 progressService에서 실시간 진행 상태 확인
+        const progress = progressService_1.progressService.getJobProgress(jobId);
+        // 2. DB에서 job 정보 조회
+        const job = await client_1.prisma.job.findUnique({
+            where: { id: jobId },
+            include: { terrain: true, road: true }
+        });
+        if (!job) {
+            return res.status(404).json({ success: false, error: 'Job not found' });
+        }
+        res.json({
+            success: true,
+            job: {
+                id: job.id,
+                type: job.type,
+                status: job.status,
+                createdAt: job.createdAt,
+                terrain: job.terrain,
+                road: job.road
+            },
+            progress: progress ? {
+                currentStep: progress.currentStep,
+                steps: progress.steps,
+                status: progress.status
+            } : null
+        });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
 });
 // Test Blender execution
 app.get('/test-blender', async (req, res) => {
@@ -455,6 +523,33 @@ app.post('/api/terrain', async (req, res) => {
             }
         });
         console.log(`[API] Created terrain job: ${dbJob.id}`);
+        // Terrain 레코드를 미리 생성 (status: processing)
+        const terrain = await client_1.prisma.terrain.create({
+            data: {
+                jobId: dbJob.id,
+                userId: 'test-user',
+                description: finalParams.description || null,
+                blendFilePath: '', // 아직 생성 안됨
+                topViewPath: '', // 아직 생성 안됨
+                metadata: { ...finalParams, status: 'processing' }
+            }
+        });
+        console.log(`[API] Created placeholder terrain: ${terrain.id}`);
+        // Progress 추적 등록
+        if (finalParams.useBiome) {
+            progressService_1.progressService.registerJob(dbJob.id, [
+                'biome_analysis',
+                'biome_maps',
+                'terrain_generation',
+                'preview_render'
+            ]);
+        }
+        else {
+            progressService_1.progressService.registerJob(dbJob.id, [
+                'terrain_generation',
+                'preview_render'
+            ]);
+        }
         // Queue: Job 추가
         await blenderQueue_1.blenderQueue.add({
             dbJobId: dbJob.id,
@@ -464,6 +559,7 @@ app.post('/api/terrain', async (req, res) => {
         res.json({
             success: true,
             jobId: dbJob.id,
+            terrainId: terrain.id,
             status: 'queued',
             message: finalParams.useBiome ? 'Biome terrain generation started' : 'Terrain generation started'
         });
@@ -652,40 +748,104 @@ app.post('/api/objects', async (req, res) => {
         const objectsId = `objects_${Date.now()}`;
         const outputBlendPath = path_1.default.join(outputDir, `${objectsId}.blend`);
         const assetsDir = path_1.default.join(process.cwd(), 'assets');
-        // 5. 오브젝트 배치 실행 (프리뷰 없이)
-        console.log(`[API] Placing objects...`);
-        console.log(`  - Base blend: ${baseBlendPath}`);
-        console.log(`  - Output blend: ${outputBlendPath}`);
-        console.log(`  - Biome maps: ${biomeMapsDir}`);
-        const { placeObjectsOnTerrain } = await Promise.resolve().then(() => __importStar(require('./services/blenderService')));
-        const result = await placeObjectsOnTerrain(baseBlendPath, biomeMapsDir, assetsDir, objectCount, outputBlendPath, '' // 프리뷰 없음
-        );
-        console.log(`[API] ✅ Objects placed: ${result.placedCount}/${objectCount}`);
-        // 6. DB에 저장 (프리뷰 경로 없음)
+        // 5. Job 생성
+        const dbJob = await client_1.prisma.job.create({
+            data: {
+                userId,
+                type: 'objects',
+                status: 'queued',
+                inputParams: { terrainId, roadId, objectCount, baseBlendPath, biomeMapsDir, assetsDir, outputBlendPath }
+            }
+        });
+        console.log(`[API] Created objects job: ${dbJob.id}`);
+        // 6. Objects 레코드를 미리 생성 (status: processing)
         const objects = await client_1.prisma.objects.create({
             data: {
                 terrainId,
                 roadId: roadId || null,
                 userId,
-                blendFilePath: outputBlendPath,
+                blendFilePath: '', // 아직 생성 안됨
                 previewPath: '', // 프리뷰 없음
-                objectCount: result.placedCount,
+                objectCount: 0, // 아직 배치 안됨
                 metadata: {
+                    status: 'processing',
                     requestedCount: objectCount,
-                    actualCount: result.placedCount
+                    jobId: dbJob.id
                 }
             }
         });
+        console.log(`[API] Created placeholder objects: ${objects.id}`);
+        // 7. Progress 추적 등록
+        progressService_1.progressService.registerJob(dbJob.id, ['object_placement']);
+        // 8. 백그라운드 작업 시작 (비동기)
+        (async () => {
+            try {
+                progressService_1.progressService.updateJobStatus(dbJob.id, 'processing');
+                progressService_1.progressService.startStep(dbJob.id, 'object_placement', 'Starting object placement...');
+                console.log(`[Background] Placing objects...`);
+                console.log(`  - Base blend: ${baseBlendPath}`);
+                console.log(`  - Output blend: ${outputBlendPath}`);
+                console.log(`  - Biome maps: ${biomeMapsDir}`);
+                const { placeObjectsOnTerrain } = await Promise.resolve().then(() => __importStar(require('./services/blenderService')));
+                const result = await placeObjectsOnTerrain(baseBlendPath, biomeMapsDir, assetsDir, objectCount, outputBlendPath, '', // 프리뷰 없음
+                (current, total, eta) => {
+                    // Progress 업데이트
+                    const progress = (current / total) * 100;
+                    const etaMin = Math.floor(eta / 60);
+                    const etaSec = Math.floor(eta % 60);
+                    progressService_1.progressService.updateStepProgress(dbJob.id, 'object_placement', progress, `Placed ${current}/${total} objects (ETA: ${etaMin}m ${etaSec}s)`);
+                });
+                console.log(`[Background] ✅ Objects placed: ${result.placedCount}/${objectCount}`);
+                // Objects 레코드 업데이트 (먼저 수행)
+                await client_1.prisma.objects.update({
+                    where: { id: objects.id },
+                    data: {
+                        blendFilePath: outputBlendPath,
+                        objectCount: result.placedCount,
+                        metadata: {
+                            status: 'completed',
+                            requestedCount: objectCount,
+                            actualCount: result.placedCount,
+                            jobId: dbJob.id
+                        }
+                    }
+                });
+                // Job 완료
+                await client_1.prisma.job.update({
+                    where: { id: dbJob.id },
+                    data: { status: 'completed', result: { objectCount: result.placedCount } }
+                });
+                // Progress 완료 (DB 업데이트 후에 SSE 전송)
+                progressService_1.progressService.completeStep(dbJob.id, 'object_placement', `Placed ${result.placedCount} objects`);
+                progressService_1.progressService.completeJob(dbJob.id, { objectCount: result.placedCount });
+            }
+            catch (error) {
+                console.error(`[Background] ❌ Objects creation failed:`, error.message);
+                // Progress 실패 처리
+                progressService_1.progressService.failJob(dbJob.id, error.message);
+                // Job 실패
+                await client_1.prisma.job.update({
+                    where: { id: dbJob.id },
+                    data: { status: 'failed' }
+                });
+                // Objects 레코드 업데이트 (실패 상태)
+                await client_1.prisma.objects.update({
+                    where: { id: objects.id },
+                    data: {
+                        metadata: {
+                            status: 'failed',
+                            error: error.message,
+                            jobId: dbJob.id
+                        }
+                    }
+                });
+            }
+        })();
+        // 즉시 응답 반환
         res.json({
             success: true,
-            objects: {
-                id: objects.id,
-                terrainId: objects.terrainId,
-                roadId: objects.roadId,
-                objectCount: objects.objectCount,
-                previewPath: objects.previewPath,
-                createdAt: objects.createdAt
-            }
+            jobId: dbJob.id,
+            objectsId: objects.id
         });
     }
     catch (error) {

@@ -23,7 +23,7 @@ import mathutils
 import json
 
 # 🐛 DEBUG MODE: True이면 모든 시도마다 상세 로그 출력
-DEBUG_MODE = False
+DEBUG_MODE = True
 
 # 🔧 Pillow가 user site-packages에 설치되어 있는 경우 경로 추가
 user_site_packages = os.path.expanduser(
@@ -755,9 +755,14 @@ def main():
         "success": 0,
     }
 
+    # 배치된 오브젝트 추적
+    placed_objects = {}
+
     # 목표 개수에 도달할 때까지 계속 시도 (최대 시도 횟수 제한)
     max_attempts = OBJECT_COUNT * 30  # 최대 10배까지 시도
     attempt = 0
+    import time
+    start_time = time.time()
 
     while placed_count < OBJECT_COUNT and attempt < max_attempts:
         attempt += 1
@@ -766,6 +771,14 @@ def main():
             log(
                 f"  Progress: {placed_count}/{OBJECT_COUNT} placed ({attempt} attempts)"
             )
+
+        # 클라이언트용 진행 상황 로그 (매 10개마다)
+        if placed_count > 0 and placed_count % 10 == 0 and attempt % 10 == 1:
+            elapsed_time = time.time() - start_time
+            avg_time_per_object = elapsed_time / placed_count
+            remaining_objects = OBJECT_COUNT - placed_count
+            estimated_remaining_time = avg_time_per_object * remaining_objects
+            log(f"[PROGRESS] {placed_count}/{OBJECT_COUNT} | elapsed={elapsed_time:.1f}s | eta={estimated_remaining_time:.1f}s")
 
         debug_stats["total_attempts"] += 1
 
@@ -896,6 +909,18 @@ def main():
             )
             scale_range = obj_config.get("scale_range", [0.8, 1.2])
 
+            # 배치된 오브젝트 카운트
+            if obj_name not in placed_objects:
+                placed_objects[obj_name] = {"count": 0, "type": selected_type}
+            placed_objects[obj_name]["count"] += 1
+
+            # 클라이언트용 진행 상황 로그 (즉시)
+            elapsed_time = time.time() - start_time
+            avg_time_per_object = elapsed_time / placed_count if placed_count > 0 else 0
+            remaining_objects = OBJECT_COUNT - placed_count
+            estimated_remaining_time = avg_time_per_object * remaining_objects
+            log(f"[PROGRESS] {placed_count}/{OBJECT_COUNT} | elapsed={elapsed_time:.1f}s | eta={estimated_remaining_time:.1f}s")
+
             if DEBUG_MODE or placed_count <= 10:
                 log(
                     f"  ✅ SUCCESS: Placed {obj_name} ({selected_type}) at ({x:.1f}, {y:.1f}, {z:.1f}) [scale: {scale_range[0]}-{scale_range[1]}] [#{placed_count}]"
@@ -918,6 +943,25 @@ def main():
     log(f"  No suitable tree (out of range): {debug_stats['no_category']}")
     log(f"  Import failed: {debug_stats['import_failed']}")
     log(f"  Success: {debug_stats['success']}")
+
+    # 배치된 오브젝트 요약
+    log(f"\n📦 Placed Objects Summary:")
+
+    # 타입별로 그룹화
+    by_type = {}
+    for obj_name, info in placed_objects.items():
+        obj_type = info["type"]
+        if obj_type not in by_type:
+            by_type[obj_type] = []
+        by_type[obj_type].append((obj_name, info["count"]))
+
+    # 각 타입별로 출력
+    for obj_type in sorted(by_type.keys()):
+        items = by_type[obj_type]
+        total_for_type = sum(count for _, count in items)
+        log(f"\n  {obj_type.upper()} (Total: {total_for_type})")
+        for obj_name, count in sorted(items, key=lambda x: x[1], reverse=True):
+            log(f"    - {obj_name}: {count}")
 
     # 목표 달성 여부 확인
     if placed_count >= OBJECT_COUNT:

@@ -3,12 +3,17 @@ import type { Objects } from '../types';
 
 const API_URL = 'http://localhost:3000';
 
-export function ObjectsGallery() {
+interface ObjectsGalleryProps {
+  onShowProgress?: (jobId: string) => void;
+  refreshTrigger?: number;
+}
+
+export function ObjectsGallery({ onShowProgress, refreshTrigger }: ObjectsGalleryProps) {
   const [objects, setObjects] = useState<Objects[]>([]);
 
   useEffect(() => {
     loadObjects();
-  }, []);
+  }, [refreshTrigger]);
 
   const loadObjects = async () => {
     try {
@@ -65,73 +70,142 @@ export function ObjectsGallery() {
           gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
           gap: '20px'
         }}>
-          {objects.map(obj => (
-            <div
-              key={obj.id}
-              style={{
-                background: '#2a2a2a',
-                padding: '15px',
-                borderRadius: '8px',
-                border: '1px solid #444'
-              }}
-            >
-              {/* 정보 */}
-              <div style={{ marginBottom: '10px' }}>
-                <div><strong>ID:</strong> {obj.id.substring(0, 8)}...</div>
-                <div><strong>오브젝트 개수:</strong> {obj.objectCount}</div>
-                <div><strong>Terrain:</strong> {obj.terrain?.description || obj.terrainId.substring(0, 8)}</div>
-                {obj.roadId && <div><strong>Road:</strong> 포함</div>}
-                <div><strong>생성일:</strong> {new Date(obj.createdAt).toLocaleString()}</div>
-              </div>
+          {objects.map(obj => {
+            const isProcessing = obj.metadata?.status === 'processing' || !obj.blendFilePath;
+            const jobId = obj.metadata?.jobId;
 
-              {/* 액션 버튼 */}
-              <div style={{ display: 'flex', gap: '10px', flexDirection: 'column' }}>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <button
-                    onClick={() => downloadGLB(obj.id)}
-                    style={{
-                      flex: 1,
-                      padding: '8px',
-                      background: '#2196F3',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    📥 GLB
-                  </button>
-                  <button
-                    onClick={() => downloadBlend(obj.id)}
-                    style={{
-                      flex: 1,
-                      padding: '8px',
-                      background: '#4CAF50',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    📦 Blend
-                  </button>
-                  <button
-                    onClick={() => deleteObjects(obj.id)}
-                    style={{
-                      padding: '8px 12px',
-                      background: '#f44336',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    🗑️
-                  </button>
+            return (
+              <div
+                key={obj.id}
+                style={{
+                  background: '#2a2a2a',
+                  padding: '15px',
+                  borderRadius: '8px',
+                  border: '1px solid #444',
+                  position: 'relative'
+                }}
+              >
+                {/* Processing 뱃지 */}
+                {isProcessing && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '10px',
+                    right: '10px',
+                    backgroundColor: '#FF9800',
+                    color: '#fff',
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    fontSize: '12px',
+                    fontWeight: 'bold'
+                  }}>
+                    Processing...
+                  </div>
+                )}
+
+                {/* Placeholder for processing */}
+                {isProcessing && (
+                  <div style={{
+                    width: '100%',
+                    height: '150px',
+                    backgroundColor: '#3a3a3a',
+                    borderRadius: '4px',
+                    marginBottom: '10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#888',
+                    fontSize: '14px'
+                  }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '48px', marginBottom: '10px' }}>⏳</div>
+                      <div>Placing objects...</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 정보 */}
+                <div style={{ marginBottom: '10px' }}>
+                  <div><strong>ID:</strong> {obj.id.substring(0, 8)}...</div>
+                  <div><strong>오브젝트 개수:</strong> {isProcessing ? `0 / ${obj.metadata?.requestedCount || 0}` : obj.objectCount}</div>
+                  <div><strong>Terrain:</strong> {obj.terrain?.description || obj.terrainId.substring(0, 8)}</div>
+                  {obj.roadId && <div><strong>Road:</strong> 포함</div>}
+                  <div><strong>생성일:</strong> {new Date(obj.createdAt).toLocaleString()}</div>
+                </div>
+
+                {/* 액션 버튼 */}
+                <div style={{ display: 'flex', gap: '10px', flexDirection: 'column' }}>
+                  {isProcessing ? (
+                    // Show Progress 버튼 (처리 중일 때)
+                    <button
+                      onClick={() => {
+                        if (jobId && onShowProgress) {
+                          onShowProgress(jobId);
+                        }
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        backgroundColor: '#FF9800',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '0.9em',
+                        fontWeight: 'bold'
+                      }}
+                    >
+                      📊 Show Progress
+                    </button>
+                  ) : (
+                    // 일반 버튼들 (완료 후)
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <button
+                        onClick={() => downloadGLB(obj.id)}
+                        style={{
+                          flex: 1,
+                          padding: '8px',
+                          background: '#2196F3',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        📥 GLB
+                      </button>
+                      <button
+                        onClick={() => downloadBlend(obj.id)}
+                        style={{
+                          flex: 1,
+                          padding: '8px',
+                          background: '#4CAF50',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        📦 Blend
+                      </button>
+                      <button
+                        onClick={() => deleteObjects(obj.id)}
+                        style={{
+                          padding: '8px 12px',
+                          background: '#f44336',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

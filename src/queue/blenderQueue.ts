@@ -1,6 +1,7 @@
 import Queue from 'bull';
 import { prisma } from '../db/client';
 import { executeBlenderScript, generateBiomeTerrain } from '../services/blenderService';
+import { progressService } from '../services/progressService';
 import path from 'path';
 import fs from 'fs';
 
@@ -24,6 +25,9 @@ blenderQueue.process(2, async (job) => {
       data: { status: 'processing' }
     });
 
+    // Progress 업데이트
+    progressService.updateJobStatus(dbJobId, 'processing');
+
     // 2. Job 타입별 처리
     if (type === 'terrain') {
       const outputPath = path.join(process.cwd(), 'output', `${dbJobId}.blend`);
@@ -34,23 +38,50 @@ blenderQueue.process(2, async (job) => {
         console.log(`[Worker] 🌍 BIOME TERRAIN MODE`);
         console.log(`[Worker] Biome points: ${params.biomeLayout.biome_points.length}`);
 
+        // 바이옴 분석 완료 (이미 API 단계에서 완료됨)
+        progressService.completeStep(dbJobId, 'biome_analysis', 'Biome layout analyzed');
+
+        // 바이옴 맵 생성 시작
+        progressService.startStep(dbJobId, 'biome_maps', 'Generating biome maps...');
+
         // 임시 디렉토리 생성
         const tempDir = path.join(process.cwd(), 'output', `biome_${dbJobId}`);
         if (!fs.existsSync(tempDir)) {
           fs.mkdirSync(tempDir, { recursive: true });
         }
 
-        // 바이옴 지형 생성
-        const result = await generateBiomeTerrain(params.biomeLayout, outputPath, tempDir);
+        // 바이옴 지형 생성 (with progress callback)
+        const result = await generateBiomeTerrain(
+          params.biomeLayout,
+          outputPath,
+          tempDir,
+          (message: string) => {
+            // 중간 진행 상태 업데이트
+            if (message.includes('generated')) {
+              progressService.completeStep(dbJobId, 'biome_maps', message);
+              progressService.startStep(dbJobId, 'terrain_generation', 'Generating 3D terrain...');
+            } else if (message.includes('mesh created')) {
+              progressService.completeStep(dbJobId, 'terrain_generation', message);
+              progressService.startStep(dbJobId, 'preview_render', 'Rendering preview...');
+            } else if (message.includes('Generating biome maps')) {
+              progressService.updateStepProgress(dbJobId, 'biome_maps', 50, message);
+            } else if (message.includes('Creating 3D terrain')) {
+              progressService.updateStepProgress(dbJobId, 'terrain_generation', 50, message);
+            }
+          }
+        );
 
         console.log(`[Worker] Biome terrain generated`);
         console.log(`[Worker] Image maps: ${result.imagePaths.length}`);
 
-        // Preview 이미지는 biome_terrain_blender.py에서 이미 생성됨
-        console.log(`[Worker] Preview image created by Blender script`);
+        // 프리뷰 렌더링 완료
+        progressService.completeStep(dbJobId, 'preview_render', 'Preview rendered');
 
       } else {
         console.log(`[Worker] Standard terrain mode`);
+
+        // 지형 생성 시작
+        progressService.startStep(dbJobId, 'terrain_generation', 'Generating terrain...');
 
         // 기존 v2 스크립트 사용
         const scriptPath = path.join(process.cwd(), 'src', 'blender-scripts', 'terrain_generator_v2.py');
@@ -80,17 +111,22 @@ blenderQueue.process(2, async (job) => {
         if (result.stderr && result.stderr.includes('Error')) {
           console.error(`[Worker] Blender stderr:`, result.stderr);
         }
+
+        // 지형 생성 완료
+        progressService.completeStep(dbJobId, 'terrain_generation', 'Terrain created');
+
+        // 프리뷰 렌더링
+        progressService.startStep(dbJobId, 'preview_render', 'Rendering preview...');
+        progressService.completeStep(dbJobId, 'preview_render', 'Preview rendered');
       }
 
-      // Terrain DB 레코드 생성
-      await prisma.terrain.create({
+      // Terrain DB 레코드 업데이트 (이미 API 단계에서 생성됨)
+      await prisma.terrain.updateMany({
+        where: { jobId: dbJobId },
         data: {
-          jobId: dbJobId,
-          userId: 'test-user',
-          description: params.description || null,
           blendFilePath: outputPath,
           topViewPath: previewPath,
-          metadata: params
+          metadata: { ...params, status: 'completed' }
         }
       });
 
@@ -102,6 +138,9 @@ blenderQueue.process(2, async (job) => {
           result: { blendFile: outputPath, preview: previewPath }
         }
       });
+
+      // Progress 완료
+      progressService.completeJob(dbJobId, { blendFile: outputPath, preview: previewPath });
 
       console.log(`[Worker] Terrain created: ${outputPath}`);
       return { success: true, outputPath, previewPath };
@@ -198,6 +237,9 @@ blenderQueue.process(2, async (job) => {
       where: { id: dbJobId },
       data: { status: 'failed' }
     });
+
+    // Progress 실패 처리
+    progressService.failJob(dbJobId, error.message);
 
     throw error;
   }

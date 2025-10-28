@@ -68,13 +68,15 @@ export async function exportToGLTF(
 export async function generateBiomeTerrain(
   biomeLayout: BiomeLayout,
   outputBlendPath: string,
-  tempDir: string
+  tempDir: string,
+  onProgress?: (message: string) => void
 ): Promise<{ stdout: string; stderr: string; imagePaths: string[] }> {
   // 1. 바이옴 레이아웃을 JSON 파일로 저장
   const biomeLayoutPath = path.join(tempDir, 'biome_layout.json');
   await writeFile(biomeLayoutPath, JSON.stringify(biomeLayout, null, 2));
 
   // 2. Python 스크립트 실행 (biome_generator_wvd.py)
+  if (onProgress) onProgress('Generating biome maps...');
   const biomeGeneratorScript = path.join(config.blenderScriptsDir, 'biome_generator_wvd.py');
   const pythonCommand = `python "${biomeGeneratorScript}" "${biomeLayoutPath}" "${tempDir}"`;
 
@@ -84,7 +86,10 @@ export async function generateBiomeTerrain(
   console.log('Biome Generator Output:', genStdout);
   if (genStderr) console.error('Biome Generator Errors:', genStderr);
 
+  if (onProgress) onProgress('Biome maps generated');
+
   // 3. Blender에서 지형 생성 (biome_terrain_blender.py)
+  if (onProgress) onProgress('Creating 3D terrain mesh...');
   const biomeBlenderScript = path.join(config.blenderScriptsDir, 'biome_terrain_blender.py');
   const imageDir = path.join(tempDir, 'biome_maps');
   const paramsFile = path.join(tempDir, 'terrain_params.json');
@@ -102,6 +107,8 @@ export async function generateBiomeTerrain(
 
   console.log('Blender Output:', blenderStdout);
   if (blenderStderr) console.error('Blender Errors:', blenderStderr);
+
+  if (onProgress) onProgress('Terrain mesh created');
 
   // Blender 프로세스 종료 후 파일 시스템 flush 대기
   await new Promise(resolve => setTimeout(resolve, 2000));
@@ -133,29 +140,116 @@ export async function placeObjectsOnTerrain(
   assetsDir: string,
   objectCount: number,
   outputBlendPath: string,    // 새로운 독립 blend 파일
-  previewPath: string
+  previewPath: string,
+  onProgress?: (current: number, total: number, eta: number) => void
 ): Promise<{ success: boolean; placedCount: number }> {
   const scriptPath = path.join(config.blenderScriptsDir, 'object_placer.py');
+  const logPath = outputBlendPath.replace('.blend', '_log.txt');
 
   const command = `"${config.blenderPath}" "${baseBlendPath}" --background --python "${scriptPath}" -- "${biomeMapsDir}" "${assetsDir}" ${objectCount} "${outputBlendPath}" "${previewPath}"`;
 
   console.log(`🔄 Placing objects on terrain: ${command}`);
 
-  try {
-    const { stdout, stderr } = await execAsync(command, {
-      maxBuffer: 20 * 1024 * 1024, // 20MB (많은 오브젝트 로그)
-      timeout: 60 * 60 * 1000,     // 60분 타임아웃
+  const fs = require('fs');
+  const { spawn } = require('child_process');
+
+  return new Promise((resolve, reject) => {
+    // Blender 프로세스를 spawn으로 실행
+    const blenderProcess = spawn(config.blenderPath, [
+      baseBlendPath,
+      '--background',
+      '--python',
+      scriptPath,
+      '--',
+      biomeMapsDir,
+      assetsDir,
+      objectCount.toString(),
+      outputBlendPath,
+      previewPath
+    ], {
+      windowsHide: true
     });
 
-    console.log('Object Placer Output:', stdout);
-    if (stderr) console.error('Object Placer Errors:', stderr);
+    let lastReadPosition = 0;
+    let lastPlacedCount = 0;
 
-    // stdout에서 배치된 오브젝트 개수 추출
-    const match = stdout.match(/Placement complete: (\d+)\/\d+ objects placed/);
-    const placedCount = match ? parseInt(match[1]) : 0;
+    // 로그 파일을 주기적으로 읽기
+    const logCheckInterval = setInterval(() => {
+      if (fs.existsSync(logPath)) {
+        try {
+          const stats = fs.statSync(logPath);
+          if (stats.size > lastReadPosition) {
+            const stream = fs.createReadStream(logPath, {
+              start: lastReadPosition,
+              encoding: 'utf8'
+            });
 
-    return { success: true, placedCount };
-  } catch (error: any) {
-    throw new Error(`Object placement failed: ${error.message}`);
-  }
+            let buffer = '';
+            stream.on('data', (chunk: string) => {
+              buffer += chunk;
+              const lines = buffer.split('\n');
+              buffer = lines.pop() || ''; // 마지막 불완전한 줄 보관
+
+              for (const line of lines) {
+                // [PROGRESS] 파싱: 50/100 | elapsed=25.3s | eta=25.7s
+                const match = line.match(/\[PROGRESS\] (\d+)\/(\d+) \| elapsed=([\d.]+)s \| eta=([\d.]+)s/);
+                if (match) {
+                  const current = parseInt(match[1]);
+                  const total = parseInt(match[2]);
+                  const eta = parseFloat(match[4]);
+
+                  if (current > lastPlacedCount) {
+                    lastPlacedCount = current;
+                    if (onProgress) {
+                      onProgress(current, total, eta);
+                    }
+                    console.log(`[Object Placer] Progress: ${current}/${total} (ETA: ${eta.toFixed(1)}s)`);
+                  }
+                }
+              }
+            });
+
+            stream.on('end', () => {
+              lastReadPosition = stats.size;
+            });
+          }
+        } catch (err) {
+          // 로그 파일 읽기 실패 무시
+        }
+      }
+    }, 1000); // 1초마다 체크
+
+    let stdout = '';
+    let stderr = '';
+
+    blenderProcess.stdout.on('data', (data: Buffer) => {
+      stdout += data.toString();
+    });
+
+    blenderProcess.stderr.on('data', (data: Buffer) => {
+      stderr += data.toString();
+    });
+
+    blenderProcess.on('close', (code: number) => {
+      clearInterval(logCheckInterval);
+
+      if (code === 0) {
+        console.log('Object Placer Output:', stdout);
+        if (stderr) console.error('Object Placer Errors:', stderr);
+
+        // stdout에서 배치된 오브젝트 개수 추출
+        const match = stdout.match(/Placement complete: (\d+)\/\d+ objects placed/);
+        const placedCount = match ? parseInt(match[1]) : lastPlacedCount;
+
+        resolve({ success: true, placedCount });
+      } else {
+        reject(new Error(`Object placement failed with code ${code}: ${stderr}`));
+      }
+    });
+
+    blenderProcess.on('error', (err: Error) => {
+      clearInterval(logCheckInterval);
+      reject(new Error(`Failed to start Blender: ${err.message}`));
+    });
+  });
 }

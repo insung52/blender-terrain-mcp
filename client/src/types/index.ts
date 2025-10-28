@@ -29,8 +29,16 @@ export interface Objects {
   terrainId: string;
   roadId?: string;
   objectCount: number;
+  blendFilePath: string;
   previewPath: string;
   createdAt: string;
+  metadata?: {
+    status?: string;
+    requestedCount?: number;
+    actualCount?: number;
+    jobId?: string;
+    error?: string;
+  };
   terrain?: {
     id: string;
     description: string;
