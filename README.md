@@ -113,7 +113,8 @@ User Input → API → Job Queue → Blender Scripts → Database
 3. **Redis** (v6+)
 4. **Blender** (v4.2+)
 5. **Python** (v3.10+, included with Blender)
-6. **Claude API Key** (from Anthropic)
+6. **Pillow (PIL)** - Python imaging library (installed in Blender's Python)
+7. **Claude API Key** (from Anthropic)
 
 ### Installation Steps
 
@@ -135,6 +136,30 @@ npm install
 cd client
 npm install
 cd ..
+```
+
+**Python Libraries (for Blender scripts):**
+
+Install Pillow (PIL) for image processing in Blender's Python environment:
+
+```bash
+# Windows - Find Blender's Python executable
+# Usually located at: C:\Program Files\Blender Foundation\Blender 4.5\4.5\python\bin\python.exe
+
+# Install Pillow
+"C:\Program Files\Blender Foundation\Blender 4.5\4.5\python\bin\python.exe" -m pip install Pillow
+
+# Verify installation
+"C:\Program Files\Blender Foundation\Blender 4.5\4.5\python\bin\python.exe" -m pip list | findstr Pillow
+```
+
+**For other operating systems:**
+```bash
+# Linux/Mac - Find Blender's Python path
+blender --background --python-expr "import sys; print(sys.executable)"
+
+# Then use that path to install Pillow
+/path/to/blender/python -m pip install Pillow
 ```
 
 #### 3. Database Setup
