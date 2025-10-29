@@ -345,79 +345,91 @@ app.delete('/api/terrain/:terrainId', async (req, res) => {
             where: { terrainId }
         });
         for (const road of roads) {
-            // Delete road files
-            if (road.blendFilePath) {
+            // Delete all road-related files (각 파일 삭제 실패해도 계속 진행)
+            const roadFiles = [
+                road.blendFilePath,
+                road.previewPath,
+                road.glbFilePath,
+                road.blendFilePath?.replace('.blend', '_params.json'),
+                road.previewPath?.replace('.png', '_log.txt')
+            ].filter(Boolean);
+            for (const filePath of roadFiles) {
                 try {
-                    const fs = require('fs');
-                    if (fs.existsSync(road.blendFilePath)) {
-                        fs.unlinkSync(road.blendFilePath);
+                    if (fs_1.default.existsSync(filePath)) {
+                        fs_1.default.unlinkSync(filePath);
+                        console.log(`✅ Deleted: ${filePath}`);
                     }
                 }
                 catch (err) {
-                    console.error(`Failed to delete road blend file: ${road.blendFilePath}`, err);
-                }
-            }
-            if (road.previewPath) {
-                try {
-                    const fs = require('fs');
-                    if (fs.existsSync(road.previewPath)) {
-                        fs.unlinkSync(road.previewPath);
-                    }
-                }
-                catch (err) {
-                    console.error(`Failed to delete road preview: ${road.previewPath}`, err);
+                    console.error(`⚠️ Failed to delete ${filePath}:`, err);
+                    // 계속 진행
                 }
             }
         }
-        // Delete roads from DB
-        await client_1.prisma.road.deleteMany({
+        // Delete related objects and their files
+        const objects = await client_1.prisma.objects.findMany({
             where: { terrainId }
         });
-        // Delete terrain files
-        const fs = require('fs');
-        const path = require('path');
-        if (terrain.blendFilePath) {
+        for (const obj of objects) {
+            const objectFiles = [
+                obj.blendFilePath,
+                obj.previewPath,
+                obj.glbFilePath,
+                obj.previewPath?.replace('.png', '_log.txt')
+            ].filter(Boolean);
+            for (const filePath of objectFiles) {
+                try {
+                    if (fs_1.default.existsSync(filePath)) {
+                        fs_1.default.unlinkSync(filePath);
+                        console.log(`✅ Deleted: ${filePath}`);
+                    }
+                }
+                catch (err) {
+                    console.error(`⚠️ Failed to delete ${filePath}:`, err);
+                }
+            }
+        }
+        // Delete terrain files (각 파일 개별 try-catch)
+        const terrainFiles = [
+            terrain.blendFilePath,
+            terrain.topViewPath,
+            terrain.glbFilePath,
+            terrain.topViewPath?.replace('.png', '_log.txt')
+        ].filter(Boolean);
+        for (const filePath of terrainFiles) {
             try {
-                if (fs.existsSync(terrain.blendFilePath)) {
-                    fs.unlinkSync(terrain.blendFilePath);
-                    console.log(`Deleted blend file: ${terrain.blendFilePath}`);
+                if (fs_1.default.existsSync(filePath)) {
+                    fs_1.default.unlinkSync(filePath);
+                    console.log(`✅ Deleted: ${filePath}`);
                 }
             }
             catch (err) {
-                console.error(`Failed to delete terrain blend file: ${terrain.blendFilePath}`, err);
+                console.error(`⚠️ Failed to delete ${filePath}:`, err);
             }
         }
+        // Delete biome folder
         if (terrain.topViewPath) {
             try {
-                if (fs.existsSync(terrain.topViewPath)) {
-                    fs.unlinkSync(terrain.topViewPath);
-                    console.log(`Deleted preview: ${terrain.topViewPath}`);
-                }
-                // 로그 파일 삭제 (preview 경로 기반)
-                const logPath = terrain.topViewPath.replace('.png', '_log.txt');
-                if (fs.existsSync(logPath)) {
-                    fs.unlinkSync(logPath);
-                    console.log(`Deleted log file: ${logPath}`);
-                }
-                // 바이옴 폴더 삭제 (preview 경로에서 ID 추출)
-                const previewBasename = path.basename(terrain.topViewPath, '_preview.png');
-                const biomeFolderPath = path.join(path.dirname(terrain.topViewPath), `biome_${previewBasename}`);
-                if (fs.existsSync(biomeFolderPath)) {
-                    fs.rmSync(biomeFolderPath, { recursive: true, force: true });
-                    console.log(`Deleted biome folder: ${biomeFolderPath}`);
+                const previewBasename = path_1.default.basename(terrain.topViewPath, '_preview.png');
+                const biomeFolderPath = path_1.default.join(path_1.default.dirname(terrain.topViewPath), `biome_${previewBasename}`);
+                if (fs_1.default.existsSync(biomeFolderPath)) {
+                    fs_1.default.rmSync(biomeFolderPath, { recursive: true, force: true });
+                    console.log(`✅ Deleted biome folder: ${biomeFolderPath}`);
                 }
             }
             catch (err) {
-                console.error(`Failed to delete terrain preview files: ${terrain.topViewPath}`, err);
+                console.error(`⚠️ Failed to delete biome folder:`, err);
             }
         }
-        // Delete terrain from DB
-        await client_1.prisma.terrain.delete({
-            where: { id: terrainId }
-        });
-        res.json({ success: true, message: 'Terrain and files deleted' });
+        // Delete from DB (파일 삭제 실패해도 DB는 삭제)
+        await client_1.prisma.objects.deleteMany({ where: { terrainId } });
+        await client_1.prisma.road.deleteMany({ where: { terrainId } });
+        await client_1.prisma.terrain.delete({ where: { id: terrainId } });
+        console.log(`✅ Terrain ${terrainId} deleted from database`);
+        res.json({ success: true, message: 'Terrain and related data deleted' });
     }
     catch (error) {
+        console.error(`❌ Failed to delete terrain:`, error.message);
         res.status(500).json({ success: false, error: error.message });
     }
 });
@@ -432,50 +444,57 @@ app.delete('/api/road/:roadId', async (req, res) => {
         if (!road) {
             return res.status(404).json({ success: false, error: 'Road not found' });
         }
-        // Delete road files
-        const fs = require('fs');
-        const path = require('path');
-        if (road.blendFilePath) {
-            try {
-                if (fs.existsSync(road.blendFilePath)) {
-                    fs.unlinkSync(road.blendFilePath);
-                    console.log(`Deleted road blend file: ${road.blendFilePath}`);
-                }
-                // 파라미터 파일 삭제 (blend 파일과 같은 이름)
-                const paramsPath = road.blendFilePath.replace('.blend', '_params.json');
-                if (fs.existsSync(paramsPath)) {
-                    fs.unlinkSync(paramsPath);
-                    console.log(`Deleted road params: ${paramsPath}`);
-                }
-            }
-            catch (err) {
-                console.error(`Failed to delete road blend file: ${road.blendFilePath}`, err);
-            }
-        }
-        if (road.previewPath) {
-            try {
-                if (fs.existsSync(road.previewPath)) {
-                    fs.unlinkSync(road.previewPath);
-                    console.log(`Deleted road preview: ${road.previewPath}`);
-                }
-                // 로그 파일 삭제 (preview 경로 기반)
-                const logPath = road.previewPath.replace('.png', '_log.txt');
-                if (fs.existsSync(logPath)) {
-                    fs.unlinkSync(logPath);
-                    console.log(`Deleted road log file: ${logPath}`);
-                }
-            }
-            catch (err) {
-                console.error(`Failed to delete road preview files: ${road.previewPath}`, err);
-            }
-        }
-        // Delete road from DB
-        await client_1.prisma.road.delete({
-            where: { id: roadId }
+        // Delete related objects first
+        const objects = await client_1.prisma.objects.findMany({
+            where: { roadId }
         });
-        res.json({ success: true, message: 'Road and files deleted' });
+        for (const obj of objects) {
+            const objectFiles = [
+                obj.blendFilePath,
+                obj.previewPath,
+                obj.glbFilePath,
+                obj.previewPath?.replace('.png', '_log.txt')
+            ].filter(Boolean);
+            for (const filePath of objectFiles) {
+                try {
+                    if (fs_1.default.existsSync(filePath)) {
+                        fs_1.default.unlinkSync(filePath);
+                        console.log(`✅ Deleted: ${filePath}`);
+                    }
+                }
+                catch (err) {
+                    console.error(`⚠️ Failed to delete ${filePath}:`, err);
+                }
+            }
+        }
+        // Delete all road-related files (각 파일 개별 try-catch)
+        const roadFiles = [
+            road.blendFilePath,
+            road.previewPath,
+            road.glbFilePath,
+            road.blendFilePath?.replace('.blend', '_params.json'),
+            road.previewPath?.replace('.png', '_log.txt')
+        ].filter(Boolean);
+        for (const filePath of roadFiles) {
+            try {
+                if (fs_1.default.existsSync(filePath)) {
+                    fs_1.default.unlinkSync(filePath);
+                    console.log(`✅ Deleted: ${filePath}`);
+                }
+            }
+            catch (err) {
+                console.error(`⚠️ Failed to delete ${filePath}:`, err);
+                // 계속 진행
+            }
+        }
+        // Delete from DB (파일 삭제 실패해도 DB는 삭제)
+        await client_1.prisma.objects.deleteMany({ where: { roadId } });
+        await client_1.prisma.road.delete({ where: { id: roadId } });
+        console.log(`✅ Road ${roadId} deleted from database`);
+        res.json({ success: true, message: 'Road and related data deleted' });
     }
     catch (error) {
+        console.error(`❌ Failed to delete road:`, error.message);
         res.status(500).json({ success: false, error: error.message });
     }
 });
@@ -1024,24 +1043,34 @@ app.delete('/api/objects/:id', async (req, res) => {
         if (!objects) {
             return res.status(404).json({ success: false, error: 'Objects not found' });
         }
-        // 파일 삭제
-        if (fs_1.default.existsSync(objects.blendFilePath)) {
-            fs_1.default.unlinkSync(objects.blendFilePath);
+        // Delete all object-related files (각 파일 개별 try-catch)
+        const objectFiles = [
+            objects.blendFilePath,
+            objects.previewPath,
+            objects.glbFilePath,
+            objects.previewPath?.replace('.png', '_log.txt')
+        ].filter(Boolean);
+        for (const filePath of objectFiles) {
+            try {
+                if (fs_1.default.existsSync(filePath)) {
+                    fs_1.default.unlinkSync(filePath);
+                    console.log(`✅ Deleted: ${filePath}`);
+                }
+            }
+            catch (err) {
+                console.error(`⚠️ Failed to delete ${filePath}:`, err);
+                // 계속 진행
+            }
         }
-        if (fs_1.default.existsSync(objects.previewPath)) {
-            fs_1.default.unlinkSync(objects.previewPath);
-        }
-        if (objects.glbFilePath && fs_1.default.existsSync(objects.glbFilePath)) {
-            fs_1.default.unlinkSync(objects.glbFilePath);
-        }
-        // DB 삭제
+        // Delete from DB (파일 삭제 실패해도 DB는 삭제)
         await client_1.prisma.objects.delete({
             where: { id }
         });
-        res.json({ success: true });
+        console.log(`✅ Objects ${id} deleted from database`);
+        res.json({ success: true, message: 'Objects deleted' });
     }
     catch (error) {
-        console.error(`[API] ❌ Failed to delete objects:`, error.message);
+        console.error(`❌ Failed to delete objects:`, error.message);
         res.status(500).json({ success: false, error: error.message });
     }
 });
