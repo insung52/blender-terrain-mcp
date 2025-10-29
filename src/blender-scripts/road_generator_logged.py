@@ -303,13 +303,14 @@ log(f"[Road] Loading texture: {texture_path}")
 
 if os.path.exists(texture_path):
     img = bpy.data.images.load(texture_path)
+    img.pack()  # Pack texture into .blend file
     img_texture = nodes.new("ShaderNodeTexImage")
     img_texture.image = img
     img_texture.location = (-200, 0)
 
     links.new(tex_coord.outputs["UV"], img_texture.inputs["Vector"])
     links.new(img_texture.outputs["Color"], bsdf.inputs["Base Color"])
-    log(f"[Road] Texture loaded successfully")
+    log(f"[Road] Texture loaded and packed successfully")
 else:
     log(f"[Road] WARNING: Texture not found at {texture_path}")
     bsdf.inputs["Base Color"].default_value = (0.1, 0.1, 0.1, 1.0)
@@ -342,9 +343,9 @@ camera.data.clip_end = 10000
 
 bpy.ops.render.render(write_still=True)
 
-# 10. Save
-log(f"[Road] Saving blend file...")
-bpy.ops.wm.save_as_mainfile(filepath=output_path)
+# 10. Save (with packed textures)
+log(f"[Road] Saving blend file with packed textures...")
+bpy.ops.wm.save_as_mainfile(filepath=output_path, compress=True, copy=True)
 
 log(f"[Road] SUCCESS: Road created at {output_path}")
 log(f"[Road] Preview saved to {preview_path}")

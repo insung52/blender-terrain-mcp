@@ -56,18 +56,54 @@ def bake_diffuse_texture(obj, texture_size=2048):
         bpy.ops.uv.smart_project(angle_limit=66.0, island_margin=0.02)
         bpy.ops.object.mode_set(mode='OBJECT')
 
+    # Mix Shader를 Emission으로 변환 (베이킹 전)
+    # 이렇게 하면 조명 없이도 Mix Shader 결과를 정확히 캡처 가능
+    original_material_output = None
+    emission_shader = None
+
+    for node in nodes:
+        if node.type == 'OUTPUT_MATERIAL':
+            original_material_output = node
+            break
+
+    if original_material_output and original_material_output.inputs['Surface'].is_linked:
+        # Surface에 연결된 노드 찾기 (Mix Shader일 것)
+        surface_link = original_material_output.inputs['Surface'].links[0]
+        original_surface_node = surface_link.from_node
+
+        # Emission Shader 추가
+        emission_shader = nodes.new(type='ShaderNodeEmission')
+        emission_shader.location = (original_surface_node.location[0] + 200, original_surface_node.location[1])
+
+        # Mix Shader 출력을 Emission의 Color로 연결
+        # 단, Mix Shader는 Shader 출력이므로 직접 연결 불가
+        # 대신 COMBINED 베이킹 사용
+        log(f"  Material uses Mix Shader, will use COMBINED baking")
+
     # Bake settings
     bpy.context.scene.render.engine = 'CYCLES'
     bpy.context.scene.cycles.device = 'GPU'
-    bpy.context.scene.cycles.samples = 16  # 빠른 베이킹
-    bpy.context.scene.render.bake.use_pass_direct = False
+    bpy.context.scene.cycles.samples = 32  # Mix Shader를 정확히 캡처하기 위해 샘플 증가
+    bpy.context.scene.render.bake.use_pass_direct = True
     bpy.context.scene.render.bake.use_pass_indirect = False
     bpy.context.scene.render.bake.use_pass_color = True
+
+    # 조명 설정 (COMBINED 베이킹용)
+    world = bpy.context.scene.world
+    if not world.use_nodes:
+        world.use_nodes = True
+    world_nodes = world.node_tree.nodes
+    world_links = world.node_tree.links
+    world_nodes.clear()
+    bg_node = world_nodes.new(type='ShaderNodeBackground')
+    bg_node.inputs['Strength'].default_value = 1.0  # 균일한 조명
+    output_node = world_nodes.new(type='ShaderNodeOutputWorld')
+    world_links.new(bg_node.outputs['Background'], output_node.inputs['Surface'])
 
     # Bake
     log(f"  Baking... (resolution: {texture_size}x{texture_size})")
     try:
-        bpy.ops.object.bake(type='DIFFUSE')
+        bpy.ops.object.bake(type='COMBINED')  # Mix Shader를 정확히 캡처
         log(f"  ✅ Bake complete")
     except Exception as e:
         log(f"  ❌ Bake failed: {e}")

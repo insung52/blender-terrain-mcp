@@ -202,8 +202,9 @@ try:
 
             img = bpy.data.images.load(img_path)
             img.name = f"biome_{param_name}"
+            img.pack()  # Pack texture into .blend file
             loaded_images[param_name] = img
-            log(f"✅ Loaded: {param_name} ({img.size[0]}x{img.size[1]})")
+            log(f"✅ Loaded and packed: {param_name} ({img.size[0]}x{img.size[1]})")
         else:
             log(f"❌ Not found: {img_path}")
 
@@ -1565,9 +1566,10 @@ try:
         if final_size_bytes == 0:
             log("❌ WARNING: Preview file is still 0 bytes!")
 
-    bpy.ops.wm.save_as_mainfile(filepath=OUTPUT_BLEND)
+    # Save with packed textures
+    bpy.ops.wm.save_as_mainfile(filepath=OUTPUT_BLEND, compress=True, copy=True)
     if os.path.exists(OUTPUT_BLEND):
-        log(f"✅ Blend file saved: {OUTPUT_BLEND}")
+        log(f"✅ Blend file saved with packed textures: {OUTPUT_BLEND}")
     else:
         log(f"❌ Blend file not created: {OUTPUT_BLEND}")
 
