@@ -33,6 +33,13 @@ export function ProgressMonitor({ jobId, onComplete, onFailed }: Props) {
   useEffect(() => {
     if (!jobId) return;
 
+    // 'preparing' 상태일 때는 SSE 연결 안하고 대기
+    if (jobId === 'preparing') {
+      setStatus('preparing');
+      console.log(`[ProgressMonitor] Preparing job...`);
+      return;
+    }
+
     console.log(`[ProgressMonitor] Connecting to job ${jobId}`);
 
     // SSE 연결
@@ -138,6 +145,7 @@ export function ProgressMonitor({ jobId, onComplete, onFailed }: Props) {
       <h3 style={{ marginTop: 0, color: '#fff' }}>
         {status === 'completed' ? '✅ Complete!' :
          status === 'failed' ? '❌ Failed' :
+         status === 'preparing' ? '🔄 Preparing job...' :
          status === 'processing' ? '⏳ Processing...' :
          '🔄 Starting...'}
       </h3>
@@ -188,9 +196,9 @@ export function ProgressMonitor({ jobId, onComplete, onFailed }: Props) {
         ))}
       </div>
 
-      {status === 'processing' && steps.length === 0 && (
+      {(status === 'processing' || status === 'preparing') && steps.length === 0 && (
         <div style={{ textAlign: 'center', padding: '20px', color: '#aaa' }}>
-          <div>Connecting to job...</div>
+          <div>{status === 'preparing' ? 'Analyzing terrain description...' : 'Connecting to job...'}</div>
         </div>
       )}
     </div>

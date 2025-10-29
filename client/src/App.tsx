@@ -142,6 +142,11 @@ function App() {
     }
 
     setLoading(true);
+
+    // 즉시 progress 팝업 열기 (임시 jobId로)
+    setProgressJobId('preparing');
+    setShowProgressModal(true);
+
     try {
       const response = await fetch(`${API_URL}/api/terrain`, {
         method: 'POST',
@@ -156,6 +161,7 @@ function App() {
 
       if (!response.ok) {
         const error = await response.json();
+        setShowProgressModal(false);
         throw new Error(error.error || 'Failed to create terrain');
       }
 
@@ -163,8 +169,7 @@ function App() {
 
       if (data.success && data.jobId) {
         setJobId(data.jobId);
-        setProgressJobId(data.jobId);
-        setShowProgressModal(true);
+        setProgressJobId(data.jobId); // 실제 jobId로 업데이트
 
         // Store jobId in localStorage for reconnection
         localStorage.setItem('currentJobId', data.jobId);
@@ -173,9 +178,11 @@ function App() {
         // Immediately reload terrains to show the processing terrain
         loadTerrains();
       } else {
+        setShowProgressModal(false);
         alert('Terrain creation failed: ' + (data.error || 'Unknown error'));
       }
     } catch (error: any) {
+      setShowProgressModal(false);
       alert('Error: ' + error.message);
     } finally {
       setLoading(false);
