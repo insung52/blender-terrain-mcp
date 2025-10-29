@@ -54,16 +54,16 @@ export function ObjectsGallery({ onShowProgress, refreshTrigger }: ObjectsGaller
   };
 
   return (
-    <div style={{ padding: '20px' }}>
-      <h2>🌲 Objects Gallery</h2>
-      <p style={{ color: '#888', marginBottom: '20px' }}>
+    <div className="section">
+      <h2>4. Objects Gallery</h2>
+      <p style={{ color: '#ccc', marginBottom: '20px' }}>
         Road Gallery에서 도로를 선택하고 "🌲 오브젝트 생성" 버튼을 클릭하세요.
       </p>
 
-      <h3>생성된 오브젝트 ({objects.length})</h3>
+       <h3 style={{ color: '#61dafb', marginTop: '1.5rem' }}> 생성된 오브젝트 ({objects.length})</h3>
 
       {objects.length === 0 ? (
-        <p style={{ color: '#888' }}>아직 생성된 오브젝트가 없습니다.</p>
+        <p style={{ color: '#ccc' }}>아직 생성된 오브젝트가 없습니다.</p>
       ) : (
         <div style={{
           display: 'grid',
@@ -78,12 +78,14 @@ export function ObjectsGallery({ onShowProgress, refreshTrigger }: ObjectsGaller
               <div
                 key={obj.id}
                 style={{
-                  background: '#2a2a2a',
+                  backgroundColor: '#ffffff',
+                  color: '#000000',
                   padding: '15px',
                   borderRadius: '8px',
-                  border: '1px solid #444',
-                  position: 'relative'
-                }}
+                  border: '1px solid #ddd',
+                  position: 'relative',
+                  colorScheme: 'light'
+                } as React.CSSProperties}
               >
                 {/* Processing 뱃지 */}
                 {isProcessing && (
@@ -92,12 +94,13 @@ export function ObjectsGallery({ onShowProgress, refreshTrigger }: ObjectsGaller
                     top: '10px',
                     right: '10px',
                     backgroundColor: '#FF9800',
-                    color: '#fff',
+                    color: '#ffffff',
                     padding: '4px 8px',
                     borderRadius: '4px',
                     fontSize: '12px',
-                    fontWeight: 'bold'
-                  }}>
+                    fontWeight: 'bold',
+                    colorScheme: 'light'
+                  } as React.CSSProperties}>
                     Processing...
                   </div>
                 )}
@@ -107,13 +110,13 @@ export function ObjectsGallery({ onShowProgress, refreshTrigger }: ObjectsGaller
                   <div style={{
                     width: '100%',
                     height: '150px',
-                    backgroundColor: '#3a3a3a',
+                    backgroundColor: '#f5f5f5',
                     borderRadius: '4px',
                     marginBottom: '10px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    color: '#888',
+                    color: '#666',
                     fontSize: '14px'
                   }}>
                     <div style={{ textAlign: 'center' }}>
@@ -124,8 +127,8 @@ export function ObjectsGallery({ onShowProgress, refreshTrigger }: ObjectsGaller
                 )}
 
                 {/* 정보 */}
-                <div style={{ marginBottom: '10px' }}>
-                  <div><strong>ID:</strong> {obj.id.substring(0, 8)}...</div>
+                <div style={{ marginBottom: '10px', color: '#000000', backgroundColor: '#ffffff' }}>
+                  <div><strong>IasdfaD:</strong> {obj.id.substring(0, 8)}...</div>
                   <div><strong>오브젝트 개수:</strong> {isProcessing ? `0 / ${obj.metadata?.requestedCount || 0}` : obj.objectCount}</div>
                   <div><strong>Terrain:</strong> {obj.terrain?.description || obj.terrainId.substring(0, 8)}</div>
                   {obj.roadId && <div><strong>Road:</strong> 포함</div>}

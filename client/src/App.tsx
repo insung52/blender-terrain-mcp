@@ -671,13 +671,15 @@ function App() {
 
       {/* Objects Gallery */}
       {activeTab === 'objects' && (
-        <ObjectsGallery
-          onShowProgress={(jobId) => {
-            setProgressJobId(jobId);
-            setShowProgressModal(true);
-          }}
-          refreshTrigger={objectsRefreshTrigger}
-        />
+        <div style={{ colorScheme: 'light', color: '#000' } as React.CSSProperties}>
+          <ObjectsGallery
+            onShowProgress={(jobId) => {
+              setProgressJobId(jobId);
+              setShowProgressModal(true);
+            }}
+            refreshTrigger={objectsRefreshTrigger}
+          />
+        </div>
       )}
 
       {/* Terrain & Road Sections (기존 코드) */}
@@ -1298,10 +1300,10 @@ function App() {
             <div style={{
               marginTop: '1rem',
               padding: '0.5rem',
-              backgroundColor: '#f5f5f5',
+              backgroundColor: '#2a2a2a',
               borderRadius: '4px',
               fontSize: '0.85em',
-              color: '#000'
+              color: '#fff'
             }}>
               <strong>Current Control Points:</strong>
               <div style={{
@@ -1310,7 +1312,7 @@ function App() {
                 wordBreak: 'break-all',
                 maxHeight: '60px',
                 overflow: 'auto',
-                color: '#000'
+                color: '#fff'
               }}>
                 {roadPoints}
               </div>
@@ -1390,14 +1392,14 @@ function App() {
               </button>
             </div>
 
-            <div className="job-result">
+            <div className="job-result" style={{ color: '#fff' }}>
               <p><strong>ID:</strong> {job.id}</p>
               <p><strong>Type:</strong> {job.type}</p>
               <p><strong>Status:</strong> <span className={`status ${job.status}`}>{job.status}</span></p>
               <p><strong>Created:</strong> {new Date(job.createdAt).toLocaleString()}</p>
 
               {job.terrain && (
-                <div className="terrain-info">
+                <div className="terrain-info" style={{ color: '#fff' }}>
                   <h4>Terrain Info</h4>
                   <p><strong>Terrain ID:</strong> {job.terrain.id}</p>
                   <p><strong>Description:</strong> {job.terrain.description}</p>
@@ -1414,7 +1416,7 @@ function App() {
               )}
 
               {job.road && (
-                <div className="road-info">
+                <div className="road-info" style={{ color: '#fff' }}>
                   <h4>Road Info</h4>
                   <p><strong>Road ID:</strong> {job.road.id}</p>
                   <p><strong>Points:</strong> {job.road.controlPoints?.length || 0}</p>
